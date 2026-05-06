@@ -1,10 +1,15 @@
-"""/campaigns CRUD with nested children + /campaigns/{id}/devices association."""
+"""/campaigns CRUD with nested children + /campaigns/{id}/devices association.
+
+Plus /campaigns/{id}/start | /pause — both write a CampaignControl message
+(StartCampaign / PauseCampaign) to Redis list ``scheduler:campaign-control``
+which scheduler (stage 3) will consume.
+"""
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from isales_common.models import (
     CallbackConfig,
     Campaign,
@@ -14,12 +19,14 @@ from isales_common.models import (
     RoleConfig,
 )
 from isales_common.schemas.callback import CallbackConfigRead
+from isales_common.schemas.messages import PauseCampaign, StartCampaign
 from isales_common.schemas.role_config import RoleConfigRead
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from isales_api.auth.deps import CurrentUser
 from isales_api.common.db import DBSession
+from isales_api.common.redis import get_redis
 from isales_api.schemas import (
     CallbackConfigNestedWrite,
     CampaignDetailRead,
@@ -287,3 +294,45 @@ async def detach_campaign_device(
     )
     if (result.rowcount or 0) == 0:  # type: ignore[attr-defined]
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="binding_not_found")
+
+
+# ─── /campaigns/{id}/start | /pause → scheduler queue ────────────────────────
+
+
+CAMPAIGN_CONTROL_QUEUE = "scheduler:campaign-control"
+
+
+async def _enqueue_control(request: Request, message: StartCampaign | PauseCampaign) -> None:
+    redis = getattr(request.app.state, "redis", None)
+    if redis is None:
+        redis = get_redis()
+        request.app.state.redis = redis
+    await redis.lpush(CAMPAIGN_CONTROL_QUEUE, message.model_dump_json())
+
+
+@router.post("/{campaign_id}/start", status_code=status.HTTP_202_ACCEPTED)
+async def start_campaign(
+    campaign_id: int,
+    request: Request,
+    session: DBSession,
+    _user: CurrentUser,
+) -> dict[str, object]:
+    if (await session.get(Campaign, campaign_id)) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    msg = StartCampaign(campaign_id=campaign_id)
+    await _enqueue_control(request, msg)
+    return {"message_id": str(msg.message_id), "queued": True}
+
+
+@router.post("/{campaign_id}/pause", status_code=status.HTTP_202_ACCEPTED)
+async def pause_campaign(
+    campaign_id: int,
+    request: Request,
+    session: DBSession,
+    _user: CurrentUser,
+) -> dict[str, object]:
+    if (await session.get(Campaign, campaign_id)) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    msg = PauseCampaign(campaign_id=campaign_id)
+    await _enqueue_control(request, msg)
+    return {"message_id": str(msg.message_id), "queued": True}
