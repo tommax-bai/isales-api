@@ -15,8 +15,49 @@ def test_health() -> None:
         assert resp.json() == {"status": "ok"}
 
 
-def test_openapi_loads() -> None:
+def test_openapi_documents_all_routes() -> None:
     app = create_app()
     with TestClient(app) as client:
         spec = client.get("/openapi.json").json()
-    assert "/health" in spec["paths"]
+    paths = set(spec["paths"].keys())
+    expected = {
+        "/health",
+        "/auth/login",
+        "/auth/me",
+        "/campaigns",
+        "/campaigns/{campaign_id}",
+        "/campaigns/{campaign_id}/devices",
+        "/campaigns/{campaign_id}/devices/{device_id}",
+        "/campaigns/{campaign_id}/start",
+        "/campaigns/{campaign_id}/pause",
+        "/leads",
+        "/leads/import",
+        "/leads/{lead_id}",
+        "/voice-models",
+        "/voice-models/{voice_id}",
+        "/voice-models/{voice_id}/sample",
+        "/holidays",
+        "/holidays/{holiday_id}",
+        "/handoff-tasks",
+        "/handoff-tasks/{task_id}",
+        "/handoff-tasks/{task_id}/pick-up",
+        "/handoff-tasks/{task_id}/complete",
+        "/calls",
+        "/calls/{call_id}",
+        "/calls/{call_id}/summary",
+        "/analytics/answer-rate",
+        "/analytics/goal-rate",
+        "/analytics/duration-distribution",
+    }
+    missing = expected - paths
+    assert not missing, f"missing routes in OpenAPI: {sorted(missing)}"
+
+    schemas = spec["components"]["schemas"]
+    for required in (
+        "TokenResponse",
+        "CampaignDetailRead",
+        "LeadRead",
+        "CallRecordRead",
+        "AnswerRate",
+    ):
+        assert required in schemas, f"{required} missing from OpenAPI components"
