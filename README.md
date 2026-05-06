@@ -43,11 +43,25 @@ isales-api          # FastAPI on :8000
 
 ## Mock event publisher (dev only)
 
-Stage 4 ships the real engine. Until then, drive `/ws/calls/{id}` from a CLI:
+Stage 4 ships the real engine. Until then, drive `/ws/calls/{id}` end-to-end
+from a CLI that publishes `EngineEvent` messages into the same Redis Pub/Sub
+channel the real engine will use.
 
 ```bash
+# Terminal 1: start the API (DB + Redis must be reachable)
+isales-api
+
+# Terminal 2: drive fake events for campaign 1, 1 Hz, for 60 seconds
 python -m scripts.fake_engine_events --campaign-id 1 --rate-hz 1 --duration-s 60
+
+# Terminal 3: subscribe via WebSocket (token must be a valid admin JWT)
+TOKEN=$(curl -s -d 'username=admin&password=changeme' \
+    http://localhost:8000/auth/login | jq -r .access_token)
+websocat "ws://localhost:8000/ws/calls/1?token=$TOKEN"
 ```
+
+The publisher is dev-only — there is no console-script entry-point and it
+will not be packaged into production wheels.
 
 ## Tests
 
