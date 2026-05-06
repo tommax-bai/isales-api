@@ -15,6 +15,7 @@ from fastapi import FastAPI
 
 from isales_api.auth.router import router as auth_router
 from isales_api.common.db import get_engine, get_sessionmaker
+from isales_api.common.redis import get_redis
 from isales_api.routers import (
     analytics,
     calls,
@@ -23,7 +24,10 @@ from isales_api.routers import (
     holidays,
     leads,
     voice_models,
+    ws,
 )
+from isales_api.ws.manager import ConnectionManager
+from isales_api.ws.redis_subscriber import make_subscriber_factory
 
 
 @asynccontextmanager
@@ -32,9 +36,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     sessionmaker = get_sessionmaker(engine)
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
+
+    redis = get_redis()
+    app.state.redis = redis
+    app.state.ws_manager = ConnectionManager(make_subscriber_factory(redis))
     try:
         yield
     finally:
+        ws_manager = getattr(app.state, "ws_manager", None)
+        if ws_manager is not None:
+            await ws_manager.shutdown()
+        await redis.close()
         await engine.dispose()
 
 
@@ -54,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(handoff_tasks.router)
     app.include_router(calls.router)
     app.include_router(analytics.router)
+    app.include_router(ws.router)
     return app
 
 
