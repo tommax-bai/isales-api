@@ -1,0 +1,53 @@
+"""isales-api FastAPI entrypoint.
+
+PR #1 (skeleton) wires the bare app + ``/health``; subsequent PRs add auth,
+CRUD routers, Campaign start/pause queue, and the WebSocket fan-out.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI
+
+from isales_api.common.db import get_engine, get_sessionmaker
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    engine = get_engine()
+    sessionmaker = get_sessionmaker(engine)
+    app.state.engine = engine
+    app.state.sessionmaker = sessionmaker
+    try:
+        yield
+    finally:
+        await engine.dispose()
+
+
+def create_app() -> FastAPI:
+    use_lifespan = lifespan if os.environ.get("ISALES_DATABASE_URL") else None
+    app = FastAPI(title="isales-api", version="0.1.0", lifespan=use_lifespan)
+
+    @app.get("/health", tags=["meta"])
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()
+
+
+def run() -> None:
+    """Console-script entry point: ``isales-api``."""
+    uvicorn.run(
+        "isales_api.main:app",
+        host="0.0.0.0",
+        port=8000,
+        ws="auto",
+        workers=1,
+    )
