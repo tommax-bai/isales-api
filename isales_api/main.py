@@ -15,7 +15,7 @@ from fastapi import FastAPI
 
 from isales_api.auth.router import router as auth_router
 from isales_api.common.db import get_engine, get_sessionmaker
-from isales_api.routers import campaigns
+from isales_api.routers import campaigns, handoff_tasks, holidays, leads, voice_models
 
 
 @asynccontextmanager
@@ -40,6 +40,10 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router)
     app.include_router(campaigns.router)
+    app.include_router(leads.router)
+    app.include_router(voice_models.router)
+    app.include_router(holidays.router)
+    app.include_router(handoff_tasks.router)
     return app
 
 

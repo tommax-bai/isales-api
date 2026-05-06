@@ -134,3 +134,41 @@ class CampaignDeviceRead(ORMModel):
     device_id: int
     created_at: datetime
     updated_at: datetime
+
+
+# ── holidays (no schema in isales-common; tiny local DTOs) ───────────────────
+
+
+class HolidayCreate(AppModel):
+    date: str  # ISO date YYYY-MM-DD
+    name: str = Field(min_length=1, max_length=128)
+    region: str = Field(default="CN", min_length=1, max_length=32)
+
+
+class HolidayUpdate(AppModel):
+    date: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    region: str | None = Field(default=None, min_length=1, max_length=32)
+
+
+class HolidayRead(ORMModel):
+    id: int
+    date: str  # serialised from date object via Pydantic
+    name: str
+    region: str
+    created_at: datetime
+    updated_at: datetime
+
+
+# ── leads/import response ────────────────────────────────────────────────────
+
+
+class LeadsImportError(AppModel):
+    row: int
+    message: str
+
+
+class LeadsImportResult(AppModel):
+    success_count: int
+    error_count: int
+    errors: list[LeadsImportError] = Field(default_factory=list)
