@@ -70,3 +70,60 @@ export ISALES_TEST_DATABASE_URL=postgresql+asyncpg://bears@localhost:5432/isales
 pytest -q
 ruff check . && mypy isales_api
 ```
+
+WebSocket fan-out + `/campaigns/{id}/{start,pause}` tests need a Redis
+reachable at `ISALES_REDIS_URL` (default `redis://localhost:6379/0`); they
+skip cleanly when Redis is absent.
+
+## Production deployment
+
+Linux + systemd, single host (multi-instance is a v2 OpenSpec change).
+
+```bash
+sudo useradd --system --create-home isales
+sudo install -d -o isales -g isales /opt/isales
+sudo -u isales python3.11 -m venv /opt/isales/venv
+sudo -u isales /opt/isales/venv/bin/pip install \
+    "isales-common @ git+https://github.com/tommax-bai/isales-common@v0.1.2" \
+    isales-api
+
+sudo install -m 0644 deploy/isales-api.service /etc/systemd/system/isales-api.service
+
+# Required env in the systemd override file
+sudo systemctl edit isales-api
+#   ISALES_JWT_SECRET=<must match telephony-api>
+#   ISALES_ADMIN_USER=admin
+#   ISALES_ADMIN_PASSWORD_HASH=<bcrypt hash>
+#   ISALES_DATABASE_URL=postgresql+asyncpg://...
+#   ISALES_REDIS_URL=redis://...
+
+# DB schema is owned by isales-common — run alembic from that package.
+sudo -u isales bash -c '
+ISALES_DATABASE_URL=postgresql+asyncpg://... \
+  /opt/isales/venv/bin/alembic \
+  -c /opt/isales/venv/lib/python3.11/site-packages/isales_common/../alembic.ini \
+  upgrade head'
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now isales-api
+
+# Logs
+journalctl -fu isales-api
+```
+
+### Required environment
+
+| variable                   | meaning                                              |
+|----------------------------|------------------------------------------------------|
+| `ISALES_DATABASE_URL`      | PG asyncpg URL                                       |
+| `ISALES_REDIS_URL`         | Redis URL — Pub/Sub for WS, scheduler queue lpush    |
+| `ISALES_JWT_SECRET`        | HS256 secret, **shared with telephony-api**          |
+| `ISALES_ADMIN_USER`        | v1 single-admin username                             |
+| `ISALES_ADMIN_PASSWORD_HASH` | bcrypt hash of admin password                      |
+
+### uvicorn worker count
+
+The systemd unit pins to 1 worker. WebSocket connections live in the worker
+process; multi-worker would require sticky session routing for
+`/ws/calls/{id}`. Multi-instance scaling is a v2 OpenSpec change candidate
+(sticky session via L7 LB or Redis Streams + cross-instance fan-out).

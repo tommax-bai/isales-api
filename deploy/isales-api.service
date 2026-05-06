@@ -1,0 +1,39 @@
+[Unit]
+Description=isales-api (HTTP + WebSocket)
+After=network-online.target postgresql.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=isales
+Group=isales
+ExecStart=/opt/isales/venv/bin/isales-api
+Restart=on-failure
+RestartSec=5
+
+# Override the env in /etc/systemd/system/isales-api.service.d/override.conf
+Environment=ISALES_DATABASE_URL=postgresql+asyncpg://isales:isales@localhost:5432/isales
+Environment=ISALES_REDIS_URL=redis://localhost:6379/0
+# ISALES_JWT_SECRET MUST match telephony-api's verifier.
+# Environment=ISALES_JWT_SECRET=change-me
+# Admin login (v1):
+# Environment=ISALES_ADMIN_USER=admin
+# Environment=ISALES_ADMIN_PASSWORD_HASH=...
+
+# uvicorn worker count: 1. WebSocket connections live inside the worker
+# process, so multi-worker would require sticky session routing.
+# `ws=auto` is set in isales_api.main.run().
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
