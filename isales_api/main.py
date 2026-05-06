@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
+from isales_api.auth.router import router as auth_router
 from isales_api.common.db import get_engine, get_sessionmaker
 
 
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    app.include_router(auth_router)
     return app
 
 
