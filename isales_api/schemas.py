@@ -11,13 +11,19 @@ from datetime import datetime
 from typing import Any, Generic, TypeVar
 
 from isales_common.enums import (
+    ContinuousInterruptionStrategy,
     GenerationStatus,
     RoleKind,
 )
 from isales_common.schemas._base import AppModel, ORMModel
 from isales_common.schemas.callback import CallbackConfigRead
 from isales_common.schemas.campaign import CampaignBase, CampaignRead
-from isales_common.schemas.jsonb import CallbackTrigger, RetryPolicy
+from isales_common.schemas.jsonb import (
+    CallbackTrigger,
+    ExtractionField,
+    RetryPolicy,
+    TimeWindow,
+)
 from isales_common.schemas.role_config import RoleConfigRead
 from pydantic import Field
 
@@ -98,13 +104,54 @@ class CampaignNestedCreate(CampaignBase):
 
 class CampaignNestedUpdate(AppModel):
     """Replace-style PATCH: any field set replaces; children lists fully
-    overwrite when present (server deletes old children, inserts new)."""
+    overwrite when present (server deletes old children, inserts new).
 
-    # Mirror CampaignUpdate (all optional). For brevity, only the most-used
-    # fields surface here; the detail view shows the rest.
+    All CampaignBase fields surface here as optional so the 9-tab edit form
+    in isales-web can persist any subset (impl-web-polish PR #4-#7).
+    """
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
     voice_id: int | None = None
+    default_replies: list[str] | None = None
     concurrency: int | None = Field(default=None, ge=1)
+    time_windows: list[TimeWindow] | None = None
+    extraction_fields: list[ExtractionField] | None = None
+
+    max_silence_activations: int | None = None
+    silence_threshold_ms: int | None = None
+    silence_phrases: list[str] | None = None
+    silence_hangup_phrase: str | None = None
+    max_no_progress_seconds: int | None = None
+
+    wrap_up_max_rounds: int | None = None
+    wrap_up_max_seconds: int | None = None
+    wrap_up_closing_phrases: list[str] | None = None
+
+    interruption_whitelist: list[str] | None = None
+    interruption_min_duration_ms: int | None = None
+    max_continuous_interruptions: int | None = None
+    continuous_interruption_strategy: ContinuousInterruptionStrategy | None = None
+
+    transfer_keyword_enabled: bool | None = None
+    transfer_keywords: list[str] | None = None
+    transfer_intent_enabled: bool | None = None
+    transfer_intent_threshold: float | None = None
+    transfer_round_enabled: bool | None = None
+    transfer_round_threshold: int | None = None
+    transfer_llm_enabled: bool | None = None
+    transfer_llm_prompt_version_id: int | None = None
+    transfer_phrases: list[str] | None = None
+
+    retry_intervals: list[int] | None = None
+    retry_max_count: int | None = None
+    follow_up_interval_days: int | None = None
+    follow_up_max_count: int | None = None
+
+    do_not_call_keywords: list[str] | None = None
+    do_not_call_llm_enabled: bool | None = None
+    do_not_call_llm_prompt_version_id: int | None = None
+
+    respect_holidays: bool | None = None
 
     role_configs: list[RoleConfigNestedWrite] | None = None
     filler_sets: list[FillerSetNestedWrite] | None = None
