@@ -20,6 +20,7 @@ from isales_api.routers import (
     analytics,
     calls,
     campaigns,
+    edge_devices,
     handoff_tasks,
     holidays,
     leads,
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(handoff_tasks.router)
     app.include_router(calls.router)
     app.include_router(analytics.router)
+    app.include_router(edge_devices.router)
     app.include_router(ws.router)
     return app
 

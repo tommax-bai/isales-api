@@ -36,9 +36,10 @@ dev = [
 
 [project.scripts]
 isales-api = "isales_api.main:run"
+isales-edge-token-mint = "scripts.mint_edge_token:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["isales_api"]
+packages = ["isales_api", "scripts"]
 
 [tool.ruff]
 line-length = 100
