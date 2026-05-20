@@ -63,7 +63,7 @@ async def clean_engine(engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
         await conn.exec_driver_sql(
             "TRUNCATE campaign, role_config, filler_set, filler_phrase, "
             "callback_config, campaign_device, device, sim_card, "
-            "device_sim_binding, lead, voice_model, holiday "
+            "device_sim_binding, appointment, lead, voice_model, holiday "
             "RESTART IDENTITY CASCADE"
         )
     yield engine

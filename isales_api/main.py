@@ -18,6 +18,7 @@ from isales_api.common.db import get_engine, get_sessionmaker
 from isales_api.common.redis import get_redis
 from isales_api.routers import (
     analytics,
+    appointments,
     calls,
     campaigns,
     edge_devices,
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(holidays.router)
     app.include_router(handoff_tasks.router)
     app.include_router(calls.router)
+    app.include_router(appointments.router)
     app.include_router(analytics.router)
     app.include_router(edge_devices.router)
     app.include_router(ws.router)
