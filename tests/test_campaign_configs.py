@@ -189,6 +189,8 @@ class TestCampaignProgress:
         assert body["total"] == 3
         assert body["status_counts"]["new"] == 2
         assert body["status_counts"]["calling"] == 1
+        # is_active 来自 Redis SET；测试 client 无 redis → 降级为 False。
+        assert body["is_active"] is False
 
     async def test_missing_campaign_404(
         self, client: AsyncClient, clean_engine: AsyncEngine

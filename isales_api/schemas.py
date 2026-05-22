@@ -228,8 +228,12 @@ class CampaignProgress(AppModel):
     """按 lead.status 聚合的 campaign 外呼进度。
 
     Spec: web-admin-campaign-workflow — campaign 详情页「外呼进度」数据源。
+
+    ``is_active`` 来自 scheduler 维护的 Redis SET（source of truth）；当 api
+    进程未持有 redis 连接（如部分单元测试）时降级为 False。
     """
 
     campaign_id: int
     total: int
     status_counts: dict[str, int] = Field(default_factory=dict)
+    is_active: bool = False

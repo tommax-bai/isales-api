@@ -19,6 +19,7 @@ from isales_common.models import (
     Lead,
     RoleConfig,
 )
+from isales_common.redis_keys import SCHEDULER_ACTIVE_CAMPAIGNS_SET
 from isales_common.schemas.callback import CallbackConfigRead
 from isales_common.schemas.messages import PauseCampaign, StartCampaign
 from isales_common.schemas.role_config import RoleConfigRead
@@ -342,9 +343,12 @@ async def pause_campaign(
 
 @router.get("/{campaign_id}/progress", response_model=CampaignProgress)
 async def campaign_progress(
-    campaign_id: int, session: DBSession, _user: CurrentUser
+    campaign_id: int,
+    request: Request,
+    session: DBSession,
+    _user: CurrentUser,
 ) -> CampaignProgress:
-    """按 lead.status GROUP BY 聚合该 campaign 的外呼进度。"""
+    """按 lead.status GROUP BY 聚合该 campaign 的外呼进度 + 启停状态。"""
     if (await session.get(Campaign, campaign_id)) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
     stmt = (
@@ -354,8 +358,17 @@ async def campaign_progress(
     )
     rows = (await session.execute(stmt)).all()
     counts = {str(s): int(c) for s, c in rows}
+    # 启停状态的 source of truth 是 scheduler 维护的 Redis SET（只读）。
+    # api 进程未持有 redis 连接时（部分单测）降级为 False。
+    redis = getattr(request.app.state, "redis", None)
+    is_active = False
+    if redis is not None:
+        is_active = bool(
+            await redis.sismember(SCHEDULER_ACTIVE_CAMPAIGNS_SET, campaign_id)
+        )
     return CampaignProgress(
         campaign_id=campaign_id,
         total=sum(counts.values()),
         status_counts=counts,
+        is_active=is_active,
     )
