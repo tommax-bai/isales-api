@@ -219,3 +219,17 @@ class LeadsImportResult(AppModel):
     success_count: int
     error_count: int
     errors: list[LeadsImportError] = Field(default_factory=list)
+
+
+# ── campaign progress ────────────────────────────────────────────────────────
+
+
+class CampaignProgress(AppModel):
+    """按 lead.status 聚合的 campaign 外呼进度。
+
+    Spec: web-admin-campaign-workflow — campaign 详情页「外呼进度」数据源。
+    """
+
+    campaign_id: int
+    total: int
+    status_counts: dict[str, int] = Field(default_factory=dict)

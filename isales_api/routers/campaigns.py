@@ -16,6 +16,7 @@ from isales_common.models import (
     CampaignDevice,
     FillerPhrase,
     FillerSet,
+    Lead,
     RoleConfig,
 )
 from isales_common.schemas.callback import CallbackConfigRead
@@ -34,6 +35,7 @@ from isales_api.schemas import (
     CampaignDeviceRead,
     CampaignNestedCreate,
     CampaignNestedUpdate,
+    CampaignProgress,
     FillerPhraseRead,
     FillerSetNestedWrite,
     FillerSetWithPhrasesRead,
@@ -336,3 +338,24 @@ async def pause_campaign(
     msg = PauseCampaign(campaign_id=campaign_id)
     await _enqueue_control(request, msg)
     return {"message_id": str(msg.message_id), "queued": True}
+
+
+@router.get("/{campaign_id}/progress", response_model=CampaignProgress)
+async def campaign_progress(
+    campaign_id: int, session: DBSession, _user: CurrentUser
+) -> CampaignProgress:
+    """按 lead.status GROUP BY 聚合该 campaign 的外呼进度。"""
+    if (await session.get(Campaign, campaign_id)) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    stmt = (
+        select(Lead.status, func.count())
+        .where(Lead.campaign_id == campaign_id)
+        .group_by(Lead.status)
+    )
+    rows = (await session.execute(stmt)).all()
+    counts = {str(s): int(c) for s, c in rows}
+    return CampaignProgress(
+        campaign_id=campaign_id,
+        total=sum(counts.values()),
+        status_counts=counts,
+    )
