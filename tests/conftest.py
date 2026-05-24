@@ -35,11 +35,14 @@ def _resolve_url() -> str:
 
 @pytest.fixture(scope="session", autouse=True)
 def _admin_env(request: pytest.FixtureRequest) -> None:
-    """Set admin creds + JWT secret env vars for the whole session."""
+    """Set admin creds + JWT secret + Fernet key env vars for the whole session."""
+    from cryptography.fernet import Fernet
+
     pw_hash = bcrypt.hashpw(b"changeme", bcrypt.gensalt()).decode()
     os.environ.setdefault("ISALES_ADMIN_USER", "admin")
     os.environ.setdefault("ISALES_ADMIN_PASSWORD_HASH", pw_hash)
     os.environ.setdefault("ISALES_JWT_SECRET", "test-secret")
+    os.environ.setdefault("ISALES_FERNET_KEY", Fernet.generate_key().decode())
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -64,7 +67,7 @@ async def clean_engine(engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
             "TRUNCATE campaign, role_config, prompt_version, filler_set, "
             "filler_phrase, callback_config, campaign_device, device, "
             "sim_card, device_sim_binding, appointment, lead, voice_model, "
-            "holiday RESTART IDENTITY CASCADE"
+            "holiday, provider_credential RESTART IDENTITY CASCADE"
         )
     yield engine
 

@@ -27,6 +27,7 @@ from isales_api.routers import (
     holidays,
     leads,
     prompt_versions,
+    provider_credentials,
     role_configs,
     voice_models,
     ws,
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(role_configs.router)
     app.include_router(prompt_versions.router)
     app.include_router(filler_sets.router)
+    app.include_router(provider_credentials.router)
     app.include_router(analytics.router)
     app.include_router(edge_devices.router)
     app.include_router(ws.router)
