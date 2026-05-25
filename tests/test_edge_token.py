@@ -26,8 +26,17 @@ SECRET = "test-shared-secret"
 
 
 def _decode(token: str) -> dict[str, object]:
-    # Skip aud check on the round-trip helper so we can read it raw.
-    return jose_jwt.decode(token, SECRET, algorithms=[ALGORITHM], audience=AUDIENCE)
+    # Round-trip helper for claim inspection — skip exp verification so
+    # tests using hardcoded historical ``now`` (e.g. 2026-05-15 with a
+    # short TTL) don't time-bomb after the date passes. Tests that
+    # actually want expiry validation call jose_jwt.decode() directly.
+    return jose_jwt.decode(
+        token,
+        SECRET,
+        algorithms=[ALGORITHM],
+        audience=AUDIENCE,
+        options={"verify_exp": False},
+    )
 
 
 def test_mint_returns_token_with_required_claims() -> None:
