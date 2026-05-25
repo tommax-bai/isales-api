@@ -14,13 +14,13 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 class TestProviderCredentialsRouter:
     async def test_list_empty(self, client: AsyncClient):
-        r = await client.get("/api/provider-credentials")
+        r = await client.get("/provider-credentials")
         assert r.status_code == 200
         assert r.json() == []
 
     async def test_upsert_creates_new(self, client: AsyncClient):
         r = await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={
                 "provider_id": "volcengine",
                 "field_name": "app_key",
@@ -41,16 +41,16 @@ class TestProviderCredentialsRouter:
     async def test_upsert_idempotent(self, client: AsyncClient):
         # 同 (provider_id, field_name) 两次 upsert → 行数不增
         await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-aaaa"},
         )
         r2 = await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-bbbb"},
         )
         assert r2.status_code == 201
         # 列表应只有 1 行 (upsert 覆盖)
-        rl = await client.get("/api/provider-credentials")
+        rl = await client.get("/provider-credentials")
         assert rl.status_code == 200
         rows = rl.json()
         assert len(rows) == 1
@@ -59,7 +59,7 @@ class TestProviderCredentialsRouter:
 
     async def test_unknown_provider_id_rejected(self, client: AsyncClient):
         r = await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={
                 "provider_id": "anthropic",
                 "field_name": "api_key",
@@ -71,7 +71,7 @@ class TestProviderCredentialsRouter:
 
     async def test_unknown_field_name_rejected(self, client: AsyncClient):
         r = await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={
                 "provider_id": "volcengine",
                 "field_name": "secret_handshake",
@@ -84,18 +84,18 @@ class TestProviderCredentialsRouter:
     async def test_list_by_provider_filters(self, client: AsyncClient):
         # 灌两 provider 各几行
         await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={"provider_id": "volcengine", "field_name": "app_key", "plaintext_value": "vc-aaa1234"},
         )
         await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={"provider_id": "volcengine", "field_name": "app_token", "plaintext_value": "vc-token-xyz"},
         )
         await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-openai123"},
         )
-        r = await client.get("/api/provider-credentials/volcengine")
+        r = await client.get("/provider-credentials/volcengine")
         assert r.status_code == 200
         rows = r.json()
         assert len(rows) == 2
@@ -104,28 +104,28 @@ class TestProviderCredentialsRouter:
 
     async def test_list_by_provider_unknown_404_or_422(self, client: AsyncClient):
         # 未知 provider_id 是 422 (语义校验) 不是 404 (因为返回[] 没空间区分)
-        r = await client.get("/api/provider-credentials/anthropic")
+        r = await client.get("/provider-credentials/anthropic")
         assert r.status_code == 422
 
     async def test_delete(self, client: AsyncClient):
         r = await client.post(
-            "/api/provider-credentials",
+            "/provider-credentials",
             json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-tobedeleted"},
         )
         cred_id = r.json()["id"]
 
-        d = await client.delete(f"/api/provider-credentials/{cred_id}")
+        d = await client.delete(f"/provider-credentials/{cred_id}")
         assert d.status_code == 204
 
-        rl = await client.get("/api/provider-credentials")
+        rl = await client.get("/provider-credentials")
         assert rl.json() == []
 
     async def test_delete_404(self, client: AsyncClient):
-        d = await client.delete("/api/provider-credentials/9999")
+        d = await client.delete("/provider-credentials/9999")
         assert d.status_code == 404
 
     async def test_reload_hint(self, client: AsyncClient):
-        r = await client.post("/api/provider-credentials/reload-hint")
+        r = await client.post("/provider-credentials/reload-hint")
         assert r.status_code == 202
         assert "restart" in r.json()["message"].lower()
 
