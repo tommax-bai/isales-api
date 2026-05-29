@@ -127,6 +127,8 @@ class CampaignNestedUpdate(AppModel):
     wrap_up_max_seconds: int | None = None
     wrap_up_closing_phrases: list[str] | None = None
 
+    greeting: str | None = None
+
     interruption_whitelist: list[str] | None = None
     interruption_min_duration_ms: int | None = None
     max_continuous_interruptions: int | None = None
