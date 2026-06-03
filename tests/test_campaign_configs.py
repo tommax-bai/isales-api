@@ -30,7 +30,7 @@ class TestRoleConfigs:
             "/role-configs",
             json={
                 "campaign_id": cid,
-                "kind": "role",
+                "kind": "main",
                 "model": "doubao-pro-32k",
                 "temperature": 0.7,
                 "top_p": 1.0,
@@ -43,7 +43,7 @@ class TestRoleConfigs:
         patched = await client.patch(f"/role-configs/{rid}", json={"temperature": 1.2})
         assert patched.json()["temperature"] == 1.2
         body = (
-            await client.get("/role-configs", params={"campaign_id": cid, "kind": "role"})
+            await client.get("/role-configs", params={"campaign_id": cid, "kind": "main"})
         ).json()
         assert body["total"] == 1
         assert (await client.delete(f"/role-configs/{rid}")).status_code == 204
@@ -52,7 +52,7 @@ class TestRoleConfigs:
         self, client: AsyncClient, clean_engine: AsyncEngine
     ) -> None:
         cid = await _seed_campaign(clean_engine)
-        for kind in ("role", "role", "judge"):
+        for kind in ("main", "main", "referee"):
             await client.post(
                 "/role-configs",
                 json={
@@ -65,7 +65,7 @@ class TestRoleConfigs:
                 },
             )
         body = (
-            await client.get("/role-configs", params={"campaign_id": cid, "kind": "role"})
+            await client.get("/role-configs", params={"campaign_id": cid, "kind": "main"})
         ).json()
         assert body["total"] == 2
 
@@ -79,13 +79,13 @@ class TestPromptVersions:
         v1 = (
             await client.post(
                 "/prompt-versions",
-                json={"scope_type": "role", "scope_id": 1, "content": "v1", "is_active": True},
+                json={"scope_type": "main", "scope_id": 1, "content": "v1", "is_active": True},
             )
         ).json()
         v2 = (
             await client.post(
                 "/prompt-versions",
-                json={"scope_type": "role", "scope_id": 1, "content": "v2", "is_active": True},
+                json={"scope_type": "main", "scope_id": 1, "content": "v2", "is_active": True},
             )
         ).json()
         # Setting v2 active deactivates v1 in the same scope.
@@ -97,15 +97,15 @@ class TestPromptVersions:
     ) -> None:
         await client.post(
             "/prompt-versions",
-            json={"scope_type": "role", "scope_id": 7, "content": "x"},
+            json={"scope_type": "main", "scope_id": 7, "content": "x"},
         )
         await client.post(
             "/prompt-versions",
-            json={"scope_type": "judge", "scope_id": 7, "content": "y"},
+            json={"scope_type": "referee", "scope_id": 7, "content": "y"},
         )
         body = (
             await client.get(
-                "/prompt-versions", params={"scope_type": "role", "scope_id": 7}
+                "/prompt-versions", params={"scope_type": "main", "scope_id": 7}
             )
         ).json()
         assert body["total"] == 1

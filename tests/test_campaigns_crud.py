@@ -49,8 +49,8 @@ class TestCampaignNestedCRUD:
     async def test_create_with_nested_then_get(self, client: AsyncClient) -> None:
         body = _campaign_payload(
             role_configs=[
-                {"kind": "role", "model": "gpt-4o-mini"},
-                {"kind": "judge", "model": "gpt-4o-mini"},
+                {"kind": "main", "model": "gpt-4o-mini"},
+                {"kind": "referee", "model": "gpt-4o-mini"},
             ],
             filler_sets=[
                 {
@@ -92,7 +92,7 @@ class TestCampaignNestedCRUD:
                 "/campaigns",
                 json=_campaign_payload(
                     name="C2",
-                    role_configs=[{"kind": "role", "model": "old"}],
+                    role_configs=[{"kind": "main", "model": "old"}],
                     filler_sets=[{"name": "old", "phrases": [{"phrase": "old"}]}],
                 ),
             )
@@ -102,7 +102,7 @@ class TestCampaignNestedCRUD:
             f"/campaigns/{cid}",
             json={
                 "name": "C2-renamed",
-                "role_configs": [{"kind": "polish", "model": "new"}],
+                "role_configs": [{"kind": "extractor", "model": "new"}],
                 "filler_sets": [
                     {"name": "new", "phrases": [{"phrase": "new1"}, {"phrase": "new2"}]}
                 ],
@@ -112,7 +112,7 @@ class TestCampaignNestedCRUD:
         body = patch.json()
         assert body["name"] == "C2-renamed"
         assert len(body["role_configs"]) == 1
-        assert body["role_configs"][0]["kind"] == "polish"
+        assert body["role_configs"][0]["kind"] == "extractor"
         assert len(body["filler_sets"][0]["phrases"]) == 2
 
         # Confirm cascading delete via direct DB read.
@@ -123,7 +123,7 @@ class TestCampaignNestedCRUD:
                     select(RoleConfig).where(RoleConfig.campaign_id == cid)
                 )
             ).scalars().all()
-            assert len(old_role_count) == 1  # only 'polish' survives
+            assert len(old_role_count) == 1  # only 'extractor' survives
             phrases = (
                 await session.execute(
                     select(FillerPhrase).join(FillerSet).where(
@@ -141,7 +141,7 @@ class TestCampaignNestedCRUD:
                 "/campaigns",
                 json=_campaign_payload(
                     name="C3",
-                    role_configs=[{"kind": "role", "model": "x"}],
+                    role_configs=[{"kind": "main", "model": "x"}],
                     filler_sets=[{"name": "fs", "phrases": [{"phrase": "p"}]}],
                     callback_configs=[
                         {
@@ -175,6 +175,22 @@ class TestCampaignNestedCRUD:
 
     async def test_get_404(self, client: AsyncClient) -> None:
         assert (await client.get("/campaigns/9999")).status_code == 404
+
+    async def test_filler_enabled_create_default_and_patch(
+        self, client: AsyncClient
+    ) -> None:
+        # Defaults to False on create.
+        cid = (
+            await client.post("/campaigns", json=_campaign_payload(name="CF"))
+        ).json()["id"]
+        detail = (await client.get(f"/campaigns/{cid}")).json()
+        assert detail["filler_enabled"] is False
+        # PATCH flips it on.
+        patched = await client.patch(
+            f"/campaigns/{cid}", json={"filler_enabled": True}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["filler_enabled"] is True
 
 
 @pytest.mark.asyncio(loop_scope="session")

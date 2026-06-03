@@ -1,8 +1,10 @@
-"""/role-configs CRUD — per-campaign LLM slot config (role / judge / polish).
+"""/role-configs CRUD — per-campaign LLM slot config (main / referee / extractor).
 
-Spec: openspec/changes/web-admin-campaign-workflow — capability `web-admin-ui`
-§ "per-campaign 外呼策略配置". 4-tier 并行 prompt 的每条配置是一行
-`role_config`（同 campaign 同 kind 可有 N 行）。
+Spec: openspec/changes/pipeline-stream-and-referee — capability `web-admin-ui`.
+The dual-LLM architecture has exactly one main / one referee / one extractor
+slot per campaign (no N-role / M-judge PK). ``kind`` is validated against the
+``RoleKind`` enum, so the old ``role`` / ``judge`` / ``polish`` values are
+rejected automatically.
 """
 
 from __future__ import annotations
