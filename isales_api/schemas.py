@@ -127,6 +127,9 @@ class CampaignNestedUpdate(AppModel):
     # engine default 400ms.
     asr_eos_silence_ms: int | None = None
 
+    # filler time-gate in ms (tts-cache-and-gated-filler § B). NULL → 600ms.
+    filler_delay_ms: int | None = None
+
     wrap_up_max_rounds: int | None = None
     wrap_up_max_seconds: int | None = None
     wrap_up_closing_phrases: list[str] | None = None

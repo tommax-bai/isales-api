@@ -208,6 +208,20 @@ class TestCampaignNestedCRUD:
         assert patched.status_code == 200
         assert patched.json()["asr_eos_silence_ms"] == 250
 
+    async def test_filler_delay_ms_create_default_and_patch(
+        self, client: AsyncClient
+    ) -> None:
+        cid = (
+            await client.post("/campaigns", json=_campaign_payload(name="CFD"))
+        ).json()["id"]
+        detail = (await client.get(f"/campaigns/{cid}")).json()
+        assert detail["filler_delay_ms"] is None
+        patched = await client.patch(
+            f"/campaigns/{cid}", json={"filler_delay_ms": 800}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["filler_delay_ms"] == 800
+
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestCampaignDevices:
