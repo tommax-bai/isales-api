@@ -192,6 +192,22 @@ class TestCampaignNestedCRUD:
         assert patched.status_code == 200
         assert patched.json()["filler_enabled"] is True
 
+    async def test_asr_eos_silence_ms_create_default_and_patch(
+        self, client: AsyncClient
+    ) -> None:
+        # Defaults to NULL on create (engine falls back to 400ms).
+        cid = (
+            await client.post("/campaigns", json=_campaign_payload(name="CE"))
+        ).json()["id"]
+        detail = (await client.get(f"/campaigns/{cid}")).json()
+        assert detail["asr_eos_silence_ms"] is None
+        # PATCH sets a per-campaign threshold.
+        patched = await client.patch(
+            f"/campaigns/{cid}", json={"asr_eos_silence_ms": 250}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["asr_eos_silence_ms"] == 250
+
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestCampaignDevices:
