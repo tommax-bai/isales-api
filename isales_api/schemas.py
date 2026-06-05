@@ -120,7 +120,7 @@ class CampaignNestedUpdate(AppModel):
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    voice_id: int | None = None
+    voice_id: str | None = Field(default=None, max_length=128)
     default_replies: list[str] | None = None
     concurrency: int | None = Field(default=None, ge=1)
     time_windows: list[TimeWindow] | None = None
