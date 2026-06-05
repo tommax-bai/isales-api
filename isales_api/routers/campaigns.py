@@ -25,6 +25,7 @@ from isales_common.providers._errors import ProviderError, ProviderInvalidReques
 from isales_common.providers.tts_volcengine import build_volcengine_tts
 from isales_common.redis_keys import SCHEDULER_ACTIVE_CAMPAIGNS_SET
 from isales_common.schemas.callback import CallbackConfigRead
+from isales_common.schemas.jsonb import RoutingRule
 from isales_common.schemas.messages import PauseCampaign, StartCampaign
 from isales_common.schemas.role_config import RoleConfigRead
 from sqlalchemy import delete, func, select
@@ -34,6 +35,11 @@ from isales_api.auth.deps import CurrentUser
 from isales_api.common.db import DBSession
 from isales_api.common.redis import get_redis
 from isales_api.common.wav import pcm16_to_wav
+from isales_api.routing_validation import (
+    referee_labels_of,
+    validate_role_labels,
+    validate_routing_rules,
+)
 from isales_api.schemas import (
     CallbackConfigNestedWrite,
     CampaignDetailRead,
@@ -47,6 +53,8 @@ from isales_api.schemas import (
     FillerSetWithPhrasesRead,
     Page,
     RoleConfigNestedWrite,
+    RoutingRulesRead,
+    RoutingRulesReplace,
     TtsPreviewRequest,
 )
 
@@ -111,6 +119,51 @@ def _campaign_base_fields(payload: CampaignNestedCreate) -> dict[str, object]:
     """Pluck all CampaignBase fields (excluding the nested children)."""
     excluded = {"role_configs", "filler_sets", "callback_configs"}
     return payload.model_dump(exclude=excluded)
+
+
+async def _validate_referee_routing(
+    session: DBSession,
+    campaign_id: int | None,
+    *,
+    role_configs: list[RoleConfigNestedWrite] | None,
+    routing_rules: list[RoutingRule] | None,
+    primary_referee_label: str | None,
+    primary_set: bool,
+) -> None:
+    """Cross-validate role labels + routing rules (engine-multi-referee §5).
+
+    Uses the payload's role_configs / routing_rules when provided, falling back
+    to the campaign's current DB state for whichever side a PATCH omits, so the
+    final intended state is always consistent.
+    """
+    if role_configs is not None:
+        validate_role_labels(role_configs)
+        ref_labels = referee_labels_of(role_configs)
+    elif campaign_id is not None:
+        existing = (
+            await session.execute(
+                select(RoleConfig).where(RoleConfig.campaign_id == campaign_id)
+            )
+        ).scalars().all()
+        ref_labels = referee_labels_of(existing)
+    else:
+        ref_labels = set()
+
+    final_rules = routing_rules
+    final_primary = primary_referee_label
+    if (final_rules is None or not primary_set) and campaign_id is not None:
+        campaign = await session.get(Campaign, campaign_id)
+        if campaign is not None:
+            if final_rules is None:
+                final_rules = [
+                    RoutingRule.model_validate(r) for r in (campaign.routing_rules or [])
+                ]
+            if not primary_set:
+                final_primary = campaign.primary_referee_label
+
+    validate_routing_rules(
+        final_rules or [], ref_labels, primary_referee_label=final_primary
+    )
 
 
 async def _replace_children(
@@ -195,6 +248,14 @@ async def get_campaign(
 async def create_campaign(
     payload: CampaignNestedCreate, session: DBSession, _user: CurrentUser
 ) -> CampaignDetailRead:
+    await _validate_referee_routing(
+        session,
+        None,
+        role_configs=payload.role_configs,
+        routing_rules=payload.routing_rules,
+        primary_referee_label=payload.primary_referee_label,
+        primary_set=True,
+    )
     campaign = Campaign(**_campaign_base_fields(payload))
     session.add(campaign)
     await session.flush()
@@ -273,6 +334,14 @@ async def update_campaign(
     campaign = await session.get(Campaign, campaign_id)
     if campaign is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    await _validate_referee_routing(
+        session,
+        campaign_id,
+        role_configs=payload.role_configs,
+        routing_rules=payload.routing_rules,
+        primary_referee_label=payload.primary_referee_label,
+        primary_set="primary_referee_label" in payload.model_fields_set,
+    )
     base_fields = payload.model_dump(
         exclude_unset=True,
         exclude={"role_configs", "filler_sets", "callback_configs"},
@@ -300,6 +369,66 @@ async def delete_campaign(
     if campaign is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
     await session.delete(campaign)
+
+
+# ─── /campaigns/{id}/routing-rules (engine-multi-referee §5.2) ───────────────
+
+
+@router.get("/{campaign_id}/routing-rules", response_model=RoutingRulesRead)
+async def get_routing_rules(
+    campaign_id: int, session: DBSession, _user: CurrentUser
+) -> RoutingRulesRead:
+    campaign = await session.get(Campaign, campaign_id)
+    if campaign is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    return RoutingRulesRead(
+        routing_rules=[RoutingRule.model_validate(r) for r in (campaign.routing_rules or [])],
+        primary_referee_label=campaign.primary_referee_label,
+        max_continuous_restructure=campaign.max_continuous_restructure,
+    )
+
+
+@router.put("/{campaign_id}/routing-rules", response_model=RoutingRulesRead)
+async def replace_routing_rules(
+    campaign_id: int,
+    payload: RoutingRulesReplace,
+    session: DBSession,
+    _user: CurrentUser,
+) -> RoutingRulesRead:
+    """Read/replace the whole ordered rule set + restructure knobs in one shot.
+
+    Rules are an ordered group (priority = order); replacing wholesale matches
+    how they are read/edited. Every rule (+ primary referee) must bind to an
+    existing referee label on this campaign.
+    """
+    campaign = await session.get(Campaign, campaign_id)
+    if campaign is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    existing_roles = (
+        await session.execute(
+            select(RoleConfig).where(RoleConfig.campaign_id == campaign_id)
+        )
+    ).scalars().all()
+    ref_labels = referee_labels_of(existing_roles)
+    final_primary = (
+        payload.primary_referee_label
+        if "primary_referee_label" in payload.model_fields_set
+        else campaign.primary_referee_label
+    )
+    validate_routing_rules(
+        payload.routing_rules, ref_labels, primary_referee_label=final_primary
+    )
+    campaign.routing_rules = [r.model_dump(mode="json") for r in payload.routing_rules]
+    if "primary_referee_label" in payload.model_fields_set:
+        campaign.primary_referee_label = payload.primary_referee_label
+    if payload.max_continuous_restructure is not None:
+        campaign.max_continuous_restructure = payload.max_continuous_restructure
+    await session.flush()
+    return RoutingRulesRead(
+        routing_rules=[RoutingRule.model_validate(r) for r in (campaign.routing_rules or [])],
+        primary_referee_label=campaign.primary_referee_label,
+        max_continuous_restructure=campaign.max_continuous_restructure,
+    )
 
 
 # ─── /campaigns/{id}/devices ─────────────────────────────────────────────────

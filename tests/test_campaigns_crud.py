@@ -50,7 +50,7 @@ class TestCampaignNestedCRUD:
         body = _campaign_payload(
             role_configs=[
                 {"kind": "main", "model": "gpt-4o-mini"},
-                {"kind": "referee", "model": "gpt-4o-mini"},
+                {"kind": "referee", "model": "gpt-4o-mini", "label": "main_judge"},
             ],
             filler_sets=[
                 {

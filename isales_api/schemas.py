@@ -22,6 +22,7 @@ from isales_common.schemas.jsonb import (
     CallbackTrigger,
     ExtractionField,
     RetryPolicy,
+    RoutingRule,
     TimeWindow,
 )
 from isales_common.schemas.role_config import RoleConfigRead
@@ -51,6 +52,8 @@ class TtsPreviewRequest(AppModel):
 
 class RoleConfigNestedWrite(AppModel):
     kind: RoleKind
+    # Routing label for referee/restructure rows (referenced by routing_rules).
+    label: str | None = Field(default=None, max_length=64)
     model: str = Field(min_length=1, max_length=128)
     current_prompt_version_id: int | None = None
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -126,6 +129,11 @@ class CampaignNestedUpdate(AppModel):
     time_windows: list[TimeWindow] | None = None
     extraction_fields: list[ExtractionField] | None = None
 
+    # multi-referee routing (engine-multi-referee-and-restructure).
+    routing_rules: list[RoutingRule] | None = None
+    max_continuous_restructure: int | None = Field(default=None, ge=0)
+    primary_referee_label: str | None = Field(default=None, max_length=64)
+
     max_silence_activations: int | None = None
     silence_threshold_ms: int | None = None
     silence_phrases: list[str] | None = None
@@ -175,6 +183,20 @@ class CampaignNestedUpdate(AppModel):
     role_configs: list[RoleConfigNestedWrite] | None = None
     filler_sets: list[FillerSetNestedWrite] | None = None
     callback_configs: list[CallbackConfigNestedWrite] | None = None
+
+
+class RoutingRulesReplace(AppModel):
+    """PUT /campaigns/{id}/routing-rules body (engine-multi-referee §5.2)."""
+
+    routing_rules: list[RoutingRule] = Field(default_factory=list)
+    primary_referee_label: str | None = Field(default=None, max_length=64)
+    max_continuous_restructure: int | None = Field(default=None, ge=0)
+
+
+class RoutingRulesRead(AppModel):
+    routing_rules: list[RoutingRule] = Field(default_factory=list)
+    primary_referee_label: str | None = None
+    max_continuous_restructure: int = 2
 
 
 class FillerSetWithPhrasesRead(FillerSetRead):

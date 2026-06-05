@@ -58,6 +58,8 @@ class TestRoleConfigs:
                 json={
                     "campaign_id": cid,
                     "kind": kind,
+                    # referee/restructure rows need a routing label.
+                    "label": "j1" if kind == "referee" else None,
                     "model": "m",
                     "temperature": 0.5,
                     "top_p": 1.0,

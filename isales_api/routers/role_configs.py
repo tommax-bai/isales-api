@@ -13,7 +13,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from isales_common.enums import RoleKind
-from isales_common.models import RoleConfig
+from isales_common.models import Campaign, RoleConfig
+from isales_common.schemas.jsonb import RoutingRule
 from isales_common.schemas.role_config import (
     RoleConfigCreate,
     RoleConfigRead,
@@ -26,6 +27,35 @@ from isales_api.common.db import DBSession
 from isales_api.schemas import Page
 
 router = APIRouter(prefix="/role-configs", tags=["role-configs"])
+
+_LABELLED_KINDS = {RoleKind.REFEREE.value, RoleKind.RESTRUCTURE.value}
+
+
+async def _require_unique_label(
+    session: DBSession,
+    campaign_id: int,
+    kind: str,
+    label: str | None,
+    *,
+    exclude_id: int | None = None,
+) -> None:
+    """referee/restructure rows MUST carry a non-empty label, unique per campaign."""
+    if kind not in _LABELLED_KINDS:
+        return
+    if not (label and label.strip()):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, detail="role_label_required"
+        )
+    stmt = select(func.count()).select_from(RoleConfig).where(
+        RoleConfig.campaign_id == campaign_id,
+        RoleConfig.label == label,
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(RoleConfig.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one() > 0:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"role_label_duplicate:{label}"
+        )
 
 
 @router.get("", response_model=Page[RoleConfigRead])
@@ -70,6 +100,9 @@ async def get_role_config(
 async def create_role_config(
     payload: RoleConfigCreate, session: DBSession, _user: CurrentUser
 ) -> RoleConfigRead:
+    await _require_unique_label(
+        session, payload.campaign_id, payload.kind.value, payload.label
+    )
     obj = RoleConfig(**payload.model_dump())
     session.add(obj)
     await session.flush()
@@ -87,8 +120,17 @@ async def update_role_config(
     obj = await session.get(RoleConfig, role_config_id)
     if obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="role_config_not_found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    for k, v in changes.items():
         setattr(obj, k, v)
+    # Re-validate label uniqueness against the post-patch kind/label.
+    await _require_unique_label(
+        session,
+        obj.campaign_id,
+        obj.kind.value if hasattr(obj.kind, "value") else obj.kind,
+        obj.label,
+        exclude_id=obj.id,
+    )
     await session.flush()
     await session.refresh(obj)
     return RoleConfigRead.model_validate(obj)
@@ -101,4 +143,19 @@ async def delete_role_config(
     obj = await session.get(RoleConfig, role_config_id)
     if obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="role_config_not_found")
+    # A referee can't be deleted while routing_rules / primary_referee_label
+    # still reference its label (§5.3) — that would leave dangling references.
+    kind = obj.kind.value if hasattr(obj.kind, "value") else obj.kind
+    if kind == RoleKind.REFEREE.value and obj.label:
+        campaign = await session.get(Campaign, obj.campaign_id)
+        if campaign is not None:
+            referencing = [
+                RoutingRule.model_validate(r).referee
+                for r in (campaign.routing_rules or [])
+            ]
+            if obj.label in referencing or campaign.primary_referee_label == obj.label:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail=f"referee_label_in_use:{obj.label}",
+                )
     await session.delete(obj)
