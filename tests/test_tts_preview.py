@@ -81,6 +81,36 @@ async def test_tts_preview_empty_text_rejected(client: AsyncClient) -> None:
     assert resp.status_code == 422
 
 
+class _RejectingTTS:
+    """Vendor rejects synthesis (e.g. invalid/ungranted voice id)."""
+
+    sample_rate = 16000
+
+    async def synthesize_stream(self, text: str, voice_id: str) -> AsyncIterator[bytes]:
+        from isales_common.providers._errors import ProviderInvalidRequest
+
+        raise ProviderInvalidRequest("session_failed code=40000001", provider="volcengine_tts")
+        yield b""  # pragma: no cover  - make this an async generator
+
+    async def aclose(self) -> None:
+        pass
+
+
+async def test_tts_preview_invalid_voice_returns_400(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "isales_api.routers.campaigns.build_volcengine_tts",
+        lambda store: _RejectingTTS(),
+    )
+    resp = await client.post(
+        "/campaigns/tts-preview",
+        json={"text": "你好", "voice_id": "not_a_real_voice"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "tts_invalid_voice_or_text"
+
+
 async def test_tts_preview_credential_missing_returns_400(client: AsyncClient) -> None:
     """No volcengine credential configured → 400, not 500."""
     resp = await client.post(

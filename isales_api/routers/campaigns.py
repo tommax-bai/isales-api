@@ -7,6 +7,7 @@ which scheduler (stage 3) will consume.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
@@ -48,6 +49,8 @@ from isales_api.schemas import (
     RoleConfigNestedWrite,
     TtsPreviewRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -233,7 +236,19 @@ async def tts_preview(
     try:
         async for chunk in provider.synthesize_stream(payload.text, payload.voice_id):
             pcm.extend(chunk)
+    except ProviderInvalidRequest as exc:
+        # Vendor rejected the request — almost always an invalid / ungranted
+        # voice id (V3 session_failed) or bad text, not a server fault. Surface
+        # as 400 so the user fixes the input; log the vendor detail.
+        logger.warning(
+            "tts_preview rejected voice=%r text_len=%s: %s",
+            payload.voice_id, len(payload.text), exc,
+        )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="tts_invalid_voice_or_text"
+        ) from exc
     except ProviderError as exc:
+        logger.warning("tts_preview synthesis failed voice=%r: %s", payload.voice_id, exc)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, detail="tts_synthesis_failed"
         ) from exc
@@ -241,6 +256,7 @@ async def tts_preview(
         await provider.aclose()
 
     if not pcm:
+        logger.warning("tts_preview empty audio voice=%r", payload.voice_id)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="tts_empty_audio")
 
     wav = pcm16_to_wav(bytes(pcm), sample_rate=provider.sample_rate)
