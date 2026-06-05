@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from isales_common.credentials import CredentialStore
 from isales_common.models import (
     CallbackConfig,
     Campaign,
@@ -19,6 +20,8 @@ from isales_common.models import (
     Lead,
     RoleConfig,
 )
+from isales_common.providers._errors import ProviderError, ProviderInvalidRequest
+from isales_common.providers.tts_volcengine import build_volcengine_tts
 from isales_common.redis_keys import SCHEDULER_ACTIVE_CAMPAIGNS_SET
 from isales_common.schemas.callback import CallbackConfigRead
 from isales_common.schemas.messages import PauseCampaign, StartCampaign
@@ -29,6 +32,7 @@ from sqlalchemy.orm import selectinload
 from isales_api.auth.deps import CurrentUser
 from isales_api.common.db import DBSession
 from isales_api.common.redis import get_redis
+from isales_api.common.wav import pcm16_to_wav
 from isales_api.schemas import (
     CallbackConfigNestedWrite,
     CampaignDetailRead,
@@ -42,6 +46,7 @@ from isales_api.schemas import (
     FillerSetWithPhrasesRead,
     Page,
     RoleConfigNestedWrite,
+    TtsPreviewRequest,
 )
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -201,6 +206,45 @@ async def create_campaign(
     detail = await _load_detail(session, campaign.id)
     assert detail is not None
     return detail
+
+
+@router.post("/tts-preview")
+async def tts_preview(
+    payload: TtsPreviewRequest, session: DBSession, _user: CurrentUser
+) -> Response:
+    """Synthesize the greeting 试听 audio and return browser-playable WAV.
+
+    Stateless (campaign-greeting-tts-preview): uses the request's text +
+    voice (the form's current, possibly unsaved values), reads vendor
+    credentials from ``provider_credential`` via ``CredentialStore``, and
+    returns ``audio/wav``. Over-length / empty input is rejected by the
+    schema (422) before any vendor call.
+    """
+    store = await CredentialStore.from_db(session)
+    try:
+        provider = build_volcengine_tts(store)
+    except ProviderInvalidRequest as exc:
+        # No TTS credential configured — a 4xx, not a 500.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="tts_credential_not_configured"
+        ) from exc
+
+    pcm = bytearray()
+    try:
+        async for chunk in provider.synthesize_stream(payload.text, payload.voice_id):
+            pcm.extend(chunk)
+    except ProviderError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, detail="tts_synthesis_failed"
+        ) from exc
+    finally:
+        await provider.aclose()
+
+    if not pcm:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="tts_empty_audio")
+
+    wav = pcm16_to_wav(bytes(pcm), sample_rate=provider.sample_rate)
+    return Response(content=wav, media_type="audio/wav")
 
 
 @router.patch("/{campaign_id}", response_model=CampaignDetailRead)

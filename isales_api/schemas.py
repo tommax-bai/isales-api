@@ -37,6 +37,15 @@ class Page(AppModel, Generic[T]):
     page_size: int
 
 
+class TtsPreviewRequest(AppModel):
+    """Greeting 试听 request (campaign-greeting-tts-preview). Stateless — uses
+    the form's current (possibly unsaved) text + voice, no campaign_id. The
+    200-char cap bounds vendor cost (a greeting is ~25 chars)."""
+
+    text: str = Field(min_length=1, max_length=200)
+    voice_id: str = Field(min_length=1, max_length=128)
+
+
 # ── nested children (no campaign_id; server fills it) ────────────────────────
 
 
