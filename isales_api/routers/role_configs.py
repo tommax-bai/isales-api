@@ -1,8 +1,11 @@
-"""/role-configs CRUD — per-campaign LLM slot config (main / referee / extractor).
+"""/role-configs CRUD — per-campaign LLM slot config (main / referee / extractor / restructure).
 
-Spec: openspec/changes/pipeline-stream-and-referee — capability `web-admin-ui`.
-The dual-LLM architecture has exactly one main / one referee / one extractor
-slot per campaign (no N-role / M-judge PK). ``kind`` is validated against the
+Spec: openspec/changes/archive/2026-06-05-engine-multi-referee-and-restructure —
+capability `web-admin-ui`. A campaign has exactly one main / one extractor slot,
+an optional single restructure slot, and **N referee slots** (was a single
+referee pre-multi-referee). ``referee`` and ``restructure`` rows carry a
+``label`` (unique per campaign) that ``campaign.routing_rules`` bind to; deleting
+a still-referenced referee is rejected (409). ``kind`` is validated against the
 ``RoleKind`` enum, so the old ``role`` / ``judge`` / ``polish`` values are
 rejected automatically.
 """

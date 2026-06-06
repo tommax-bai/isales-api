@@ -29,7 +29,6 @@ from isales_common.schemas.jsonb import RoutingRule
 from isales_common.schemas.messages import PauseCampaign, StartCampaign
 from isales_common.schemas.role_config import RoleConfigRead
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import selectinload
 
 from isales_api.auth.deps import CurrentUser
 from isales_api.common.db import DBSession
@@ -63,12 +62,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
-_CAMPAIGN_NESTED_LOAD = (
-    selectinload(Campaign.role_configs) if False else None
-)
-# selectinload requires relationships to exist on the model. They aren't
-# declared on Campaign in isales-common, so we load children with explicit
-# follow-up queries below — keeps this PR scoped.
+# Campaign has no ORM relationships to its children (role_configs / filler_sets /
+# callback_configs) declared in isales-common, so _load_detail loads them with
+# explicit follow-up queries rather than selectinload.
 
 
 async def _load_detail(session: DBSession, campaign_id: int) -> CampaignDetailRead | None:
