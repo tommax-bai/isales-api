@@ -42,13 +42,13 @@ def _next_event(call_record_id: int, idx: int) -> object:
     """Cycle through a small, deterministic set of valid EngineEvents."""
     sample = [
         CallStarted(call_record_id=call_record_id, started_at=datetime.now(UTC)),
-        StatusChanged(call_record_id=call_record_id, status=CallStatus.LISTENING),
+        StatusChanged(call_record_id=call_record_id, status=CallStatus.IN_CALL),
         ASRPartial(
             call_record_id=call_record_id,
             text=f"用户说话片段 #{idx}",
             timestamp_ms=idx * 1000,
         ),
-        StatusChanged(call_record_id=call_record_id, status=CallStatus.SPEAKING),
+        StatusChanged(call_record_id=call_record_id, status=CallStatus.IN_CALL),
         CallEndedEvent(
             call_record_id=call_record_id,
             hangup_cause=HangupCause.NORMAL_CLEARING,
