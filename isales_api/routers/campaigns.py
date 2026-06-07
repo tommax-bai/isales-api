@@ -8,7 +8,7 @@ which scheduler (stage 3) will consume.
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from isales_common.credentials import CredentialStore
@@ -35,6 +35,7 @@ from isales_api.common.db import DBSession
 from isales_api.common.redis import get_redis
 from isales_api.common.wav import pcm16_to_wav
 from isales_api.routing_validation import (
+    persona_labels_of,
     referee_labels_of,
     validate_role_labels,
     validate_routing_rules,
@@ -125,16 +126,20 @@ async def _validate_referee_routing(
     routing_rules: list[RoutingRule] | None,
     primary_referee_label: str | None,
     primary_set: bool,
+    tools: dict[str, Any] | None = None,
+    tools_set: bool = False,
 ) -> None:
-    """Cross-validate role labels + routing rules (engine-multi-referee §5).
+    """Cross-validate role labels + routing rules (engine-multi-referee §5;
+    engine-tools-multidialogue-gating: persona labels + tool aliases).
 
-    Uses the payload's role_configs / routing_rules when provided, falling back
-    to the campaign's current DB state for whichever side a PATCH omits, so the
-    final intended state is always consistent.
+    Uses the payload's role_configs / routing_rules / tools when provided,
+    falling back to the campaign's current DB state for whichever side a PATCH
+    omits, so the final intended state is always consistent.
     """
     if role_configs is not None:
         validate_role_labels(role_configs)
         ref_labels = referee_labels_of(role_configs)
+        persona_labels = persona_labels_of(role_configs)
     elif campaign_id is not None:
         existing = (
             await session.execute(
@@ -142,12 +147,15 @@ async def _validate_referee_routing(
             )
         ).scalars().all()
         ref_labels = referee_labels_of(existing)
+        persona_labels = persona_labels_of(existing)
     else:
         ref_labels = set()
+        persona_labels = set()
 
     final_rules = routing_rules
     final_primary = primary_referee_label
-    if (final_rules is None or not primary_set) and campaign_id is not None:
+    final_tools = tools if tools_set else None
+    if (final_rules is None or not primary_set or not tools_set) and campaign_id is not None:
         campaign = await session.get(Campaign, campaign_id)
         if campaign is not None:
             if final_rules is None:
@@ -156,9 +164,15 @@ async def _validate_referee_routing(
                 ]
             if not primary_set:
                 final_primary = campaign.primary_referee_label
+            if not tools_set:
+                final_tools = campaign.tools or {}
 
     validate_routing_rules(
-        final_rules or [], ref_labels, primary_referee_label=final_primary
+        final_rules or [],
+        ref_labels,
+        primary_referee_label=final_primary,
+        persona_labels=persona_labels,
+        tool_aliases=set((final_tools or {}).keys()),
     )
 
 
@@ -251,6 +265,8 @@ async def create_campaign(
         routing_rules=payload.routing_rules,
         primary_referee_label=payload.primary_referee_label,
         primary_set=True,
+        tools=payload.tools,
+        tools_set=True,
     )
     campaign = Campaign(**_campaign_base_fields(payload))
     session.add(campaign)
@@ -337,6 +353,8 @@ async def update_campaign(
         routing_rules=payload.routing_rules,
         primary_referee_label=payload.primary_referee_label,
         primary_set="primary_referee_label" in payload.model_fields_set,
+        tools=payload.tools,
+        tools_set="tools" in payload.model_fields_set,
     )
     base_fields = payload.model_dump(
         exclude_unset=True,
@@ -406,13 +424,18 @@ async def replace_routing_rules(
         )
     ).scalars().all()
     ref_labels = referee_labels_of(existing_roles)
+    persona_labels = persona_labels_of(existing_roles)
     final_primary = (
         payload.primary_referee_label
         if "primary_referee_label" in payload.model_fields_set
         else campaign.primary_referee_label
     )
     validate_routing_rules(
-        payload.routing_rules, ref_labels, primary_referee_label=final_primary
+        payload.routing_rules,
+        ref_labels,
+        primary_referee_label=final_primary,
+        persona_labels=persona_labels,
+        tool_aliases=set((campaign.tools or {}).keys()),
     )
     campaign.routing_rules = [r.model_dump(mode="json") for r in payload.routing_rules]
     if "primary_referee_label" in payload.model_fields_set:

@@ -17,7 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 from isales_common.enums import RoleKind
 from isales_common.models import Campaign, RoleConfig
-from isales_common.schemas.jsonb import RoutingRule
+from isales_common.schemas.jsonb import RoutePersonaAction, RoutingRule
 from isales_common.schemas.role_config import (
     RoleConfigCreate,
     RoleConfigRead,
@@ -31,7 +31,12 @@ from isales_api.schemas import Page
 
 router = APIRouter(prefix="/role-configs", tags=["role-configs"])
 
-_LABELLED_KINDS = {RoleKind.REFEREE.value, RoleKind.RESTRUCTURE.value}
+# persona labels are isolated; referee + restructure share one namespace
+# (engine-tools-multidialogue-gating). A referee "warm" and a persona "warm"
+# may coexist.
+_PERSONA_KINDS = {RoleKind.PERSONA.value}
+_REFEREE_RESTRUCTURE_KINDS = {RoleKind.REFEREE.value, RoleKind.RESTRUCTURE.value}
+_LABELLED_KINDS = _PERSONA_KINDS | _REFEREE_RESTRUCTURE_KINDS
 
 
 async def _require_unique_label(
@@ -42,16 +47,19 @@ async def _require_unique_label(
     *,
     exclude_id: int | None = None,
 ) -> None:
-    """referee/restructure rows MUST carry a non-empty label, unique per campaign."""
+    """referee/restructure/persona rows MUST carry a non-empty label, unique per
+    campaign WITHIN their namespace (persona isolated from referee/restructure)."""
     if kind not in _LABELLED_KINDS:
         return
     if not (label and label.strip()):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, detail="role_label_required"
         )
+    namespace = _PERSONA_KINDS if kind in _PERSONA_KINDS else _REFEREE_RESTRUCTURE_KINDS
     stmt = select(func.count()).select_from(RoleConfig).where(
         RoleConfig.campaign_id == campaign_id,
         RoleConfig.label == label,
+        RoleConfig.kind.in_(namespace),
     )
     if exclude_id is not None:
         stmt = stmt.where(RoleConfig.id != exclude_id)
@@ -161,4 +169,16 @@ async def delete_role_config(
                     status.HTTP_409_CONFLICT,
                     detail=f"referee_label_in_use:{obj.label}",
                 )
+    # A persona can't be deleted while a route action still targets its label
+    # (engine-tools-multidialogue-gating) — that would leave a dangling route.
+    if kind == RoleKind.PERSONA.value and obj.label:
+        campaign = await session.get(Campaign, obj.campaign_id)
+        if campaign is not None:
+            for r in (campaign.routing_rules or []):
+                action = RoutingRule.model_validate(r).action
+                if isinstance(action, RoutePersonaAction) and action.to == obj.label:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        detail=f"persona_label_in_use:{obj.label}",
+                    )
     await session.delete(obj)
