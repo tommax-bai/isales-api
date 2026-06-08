@@ -24,6 +24,7 @@ from isales_common.schemas.jsonb import (
     RetryPolicy,
     RoutingRule,
     TimeWindow,
+    ToolConfig,
 )
 from isales_common.schemas.role_config import RoleConfigRead
 from pydantic import Field
@@ -133,6 +134,16 @@ class CampaignNestedUpdate(AppModel):
     routing_rules: list[RoutingRule] | None = None
     max_continuous_restructure: int | None = Field(default=None, ge=0)
     primary_referee_label: str | None = Field(default=None, max_length=64)
+
+    # gating + multi-persona (engine-tools-multidialogue-gating). update_campaign
+    # reads payload.tools unconditionally — these MUST be declared here or every
+    # PATCH 500s (AttributeError). Bounds mirror CampaignBase.
+    tools: dict[str, ToolConfig] | None = None
+    persona_fanout_cap: int | None = Field(default=None, ge=1, le=3)
+    referee_timeout_ms: int | None = Field(default=None, gt=0)
+    referee_fail_open_route: str | None = Field(
+        default=None, min_length=1, max_length=64
+    )
 
     max_silence_activations: int | None = None
     silence_threshold_ms: int | None = None
