@@ -93,14 +93,12 @@ class TestRoutingRulesEndpoint:
             f"/campaigns/{cid}/routing-rules",
             json={
                 "routing_rules": [GOAL_RULE],
-                "primary_referee_label": "main_judge",
                 "max_continuous_restructure": 3,
             },
         )
         assert put.status_code == 200, put.text
         got = (await client.get(f"/campaigns/{cid}/routing-rules")).json()
         assert len(got["routing_rules"]) == 1
-        assert got["primary_referee_label"] == "main_judge"
         assert got["max_continuous_restructure"] == 3
 
     async def test_routing_rule_unknown_referee_rejected(
@@ -126,17 +124,6 @@ class TestRoutingRulesEndpoint:
         r = await client.put(f"/campaigns/{cid}/routing-rules", json={"routing_rules": [bad_rule]})
         assert r.status_code == 422  # RoutingRule schema validator
 
-    async def test_unknown_primary_referee_rejected(
-        self, client: AsyncClient, clean_engine: AsyncEngine
-    ) -> None:
-        cid = await _seed_campaign(clean_engine)
-        await self._seed_referee(client, cid)
-        r = await client.put(
-            f"/campaigns/{cid}/routing-rules",
-            json={"routing_rules": [], "primary_referee_label": "ghost"},
-        )
-        assert r.status_code == 422
-        assert r.json()["detail"].startswith("primary_referee_unknown")
 
 
 @pytest.mark.asyncio(loop_scope="session")

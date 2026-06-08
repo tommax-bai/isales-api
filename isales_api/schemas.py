@@ -21,6 +21,7 @@ from isales_common.schemas.campaign import CampaignBase, CampaignRead
 from isales_common.schemas.jsonb import (
     CallbackTrigger,
     ExtractionField,
+    InterruptionRule,
     RetryPolicy,
     RoutingRule,
     TimeWindow,
@@ -133,7 +134,6 @@ class CampaignNestedUpdate(AppModel):
     # multi-referee routing (engine-multi-referee-and-restructure).
     routing_rules: list[RoutingRule] | None = None
     max_continuous_restructure: int | None = Field(default=None, ge=0)
-    primary_referee_label: str | None = Field(default=None, max_length=64)
 
     # gating + multi-persona (engine-tools-multidialogue-gating). update_campaign
     # reads payload.tools unconditionally — these MUST be declared here or every
@@ -165,6 +165,7 @@ class CampaignNestedUpdate(AppModel):
     greeting: str | None = None
     filler_enabled: bool | None = None
 
+    interruption_rules: InterruptionRule | None = None
     interruption_whitelist: list[str] | None = None
     interruption_min_duration_ms: int | None = None
     max_continuous_interruptions: int | None = None
@@ -200,13 +201,11 @@ class RoutingRulesReplace(AppModel):
     """PUT /campaigns/{id}/routing-rules body (engine-multi-referee §5.2)."""
 
     routing_rules: list[RoutingRule] = Field(default_factory=list)
-    primary_referee_label: str | None = Field(default=None, max_length=64)
     max_continuous_restructure: int | None = Field(default=None, ge=0)
 
 
 class RoutingRulesRead(AppModel):
     routing_rules: list[RoutingRule] = Field(default_factory=list)
-    primary_referee_label: str | None = None
     max_continuous_restructure: int = 2
 
 

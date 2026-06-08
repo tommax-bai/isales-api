@@ -91,7 +91,6 @@ def validate_routing_rules(
     routing_rules: Sequence[RoutingRule],
     referee_labels: set[str],
     *,
-    primary_referee_label: str | None = None,
     persona_labels: set[str] | None = None,
     tool_aliases: set[str] | None = None,
 ) -> None:
@@ -118,8 +117,3 @@ def validate_routing_rules(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"routing_rule_unknown_tool:{action.tool}",
             )
-    if primary_referee_label and primary_referee_label not in referee_labels:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"primary_referee_unknown:{primary_referee_label}",
-        )

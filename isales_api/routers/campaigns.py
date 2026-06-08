@@ -25,7 +25,11 @@ from isales_common.providers._errors import ProviderError, ProviderInvalidReques
 from isales_common.providers.tts_volcengine import build_volcengine_tts
 from isales_common.redis_keys import SCHEDULER_ACTIVE_CAMPAIGNS_SET
 from isales_common.schemas.callback import CallbackConfigRead
-from isales_common.schemas.jsonb import RoutingRule
+from isales_common.schemas.jsonb import (
+    InterruptionRule,
+    RoutingRule,
+    validate_interruption_rule,
+)
 from isales_common.schemas.messages import PauseCampaign, StartCampaign
 from isales_common.schemas.role_config import RoleConfigRead
 from sqlalchemy import delete, func, select
@@ -124,8 +128,6 @@ async def _validate_referee_routing(
     *,
     role_configs: list[RoleConfigNestedWrite] | None,
     routing_rules: list[RoutingRule] | None,
-    primary_referee_label: str | None,
-    primary_set: bool,
     tools: dict[str, Any] | None = None,
     tools_set: bool = False,
 ) -> None:
@@ -153,24 +155,20 @@ async def _validate_referee_routing(
         persona_labels = set()
 
     final_rules = routing_rules
-    final_primary = primary_referee_label
     final_tools = tools if tools_set else None
-    if (final_rules is None or not primary_set or not tools_set) and campaign_id is not None:
+    if (final_rules is None or not tools_set) and campaign_id is not None:
         campaign = await session.get(Campaign, campaign_id)
         if campaign is not None:
             if final_rules is None:
                 final_rules = [
                     RoutingRule.model_validate(r) for r in (campaign.routing_rules or [])
                 ]
-            if not primary_set:
-                final_primary = campaign.primary_referee_label
             if not tools_set:
                 final_tools = campaign.tools or {}
 
     validate_routing_rules(
         final_rules or [],
         ref_labels,
-        primary_referee_label=final_primary,
         persona_labels=persona_labels,
         tool_aliases=set((final_tools or {}).keys()),
     )
@@ -244,6 +242,21 @@ async def list_campaigns(
     )
 
 
+def _validate_interruption_rules(rules: InterruptionRule | None) -> None:
+    """Enforce the barge-in rule tree's depth / node-count limits on write
+    (structure/types/regex-length are enforced by the schema; this adds the
+    whole-tree limits). engine-interruption-rule-tree D7."""
+    if rules is None:
+        return
+    try:
+        validate_interruption_rule(rules)
+    except ValueError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"interruption_rule_invalid:{e}",
+        ) from e
+
+
 @router.get("/{campaign_id}", response_model=CampaignDetailRead)
 async def get_campaign(
     campaign_id: int, session: DBSession, _user: CurrentUser
@@ -258,13 +271,12 @@ async def get_campaign(
 async def create_campaign(
     payload: CampaignNestedCreate, session: DBSession, _user: CurrentUser
 ) -> CampaignDetailRead:
+    _validate_interruption_rules(payload.interruption_rules)
     await _validate_referee_routing(
         session,
         None,
         role_configs=payload.role_configs,
         routing_rules=payload.routing_rules,
-        primary_referee_label=payload.primary_referee_label,
-        primary_set=True,
         tools=payload.tools,
         tools_set=True,
     )
@@ -346,13 +358,13 @@ async def update_campaign(
     campaign = await session.get(Campaign, campaign_id)
     if campaign is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
+    if "interruption_rules" in payload.model_fields_set:
+        _validate_interruption_rules(payload.interruption_rules)
     await _validate_referee_routing(
         session,
         campaign_id,
         role_configs=payload.role_configs,
         routing_rules=payload.routing_rules,
-        primary_referee_label=payload.primary_referee_label,
-        primary_set="primary_referee_label" in payload.model_fields_set,
         tools=payload.tools,
         tools_set="tools" in payload.model_fields_set,
     )
@@ -397,7 +409,6 @@ async def get_routing_rules(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="campaign_not_found")
     return RoutingRulesRead(
         routing_rules=[RoutingRule.model_validate(r) for r in (campaign.routing_rules or [])],
-        primary_referee_label=campaign.primary_referee_label,
         max_continuous_restructure=campaign.max_continuous_restructure,
     )
 
@@ -425,27 +436,18 @@ async def replace_routing_rules(
     ).scalars().all()
     ref_labels = referee_labels_of(existing_roles)
     persona_labels = persona_labels_of(existing_roles)
-    final_primary = (
-        payload.primary_referee_label
-        if "primary_referee_label" in payload.model_fields_set
-        else campaign.primary_referee_label
-    )
     validate_routing_rules(
         payload.routing_rules,
         ref_labels,
-        primary_referee_label=final_primary,
         persona_labels=persona_labels,
         tool_aliases=set((campaign.tools or {}).keys()),
     )
     campaign.routing_rules = [r.model_dump(mode="json") for r in payload.routing_rules]
-    if "primary_referee_label" in payload.model_fields_set:
-        campaign.primary_referee_label = payload.primary_referee_label
     if payload.max_continuous_restructure is not None:
         campaign.max_continuous_restructure = payload.max_continuous_restructure
     await session.flush()
     return RoutingRulesRead(
         routing_rules=[RoutingRule.model_validate(r) for r in (campaign.routing_rules or [])],
-        primary_referee_label=campaign.primary_referee_label,
         max_continuous_restructure=campaign.max_continuous_restructure,
     )
 

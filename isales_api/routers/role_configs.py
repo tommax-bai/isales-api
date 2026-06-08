@@ -154,8 +154,8 @@ async def delete_role_config(
     obj = await session.get(RoleConfig, role_config_id)
     if obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="role_config_not_found")
-    # A referee can't be deleted while routing_rules / primary_referee_label
-    # still reference its label (§5.3) — that would leave dangling references.
+    # A referee can't be deleted while routing_rules still reference its label
+    # (§5.3) — that would leave dangling references.
     kind = obj.kind.value if hasattr(obj.kind, "value") else obj.kind
     if kind == RoleKind.REFEREE.value and obj.label:
         campaign = await session.get(Campaign, obj.campaign_id)
@@ -164,7 +164,7 @@ async def delete_role_config(
                 RoutingRule.model_validate(r).referee
                 for r in (campaign.routing_rules or [])
             ]
-            if obj.label in referencing or campaign.primary_referee_label == obj.label:
+            if obj.label in referencing:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     detail=f"referee_label_in_use:{obj.label}",
