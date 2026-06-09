@@ -1,4 +1,4 @@
-"""Tests for /leads, /voice-models, /holidays, /handoff-tasks routers."""
+"""Tests for /leads, /holidays routers."""
 
 from __future__ import annotations
 
@@ -77,52 +77,6 @@ class TestLeads:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-class TestVoiceModels:
-    async def test_crud(self, client: AsyncClient) -> None:
-        created = await client.post(
-            "/voice-models",
-            json={
-                "name": "v1",
-                "provider": "elevenlabs",
-                "voice_id": "abc",
-            },
-        )
-        assert created.status_code == 201
-        vid = created.json()["id"]
-        assert (await client.get("/voice-models")).json()["total"] == 1
-        patch = await client.patch(
-            f"/voice-models/{vid}", json={"sample_url": "https://example.com/x.mp3"}
-        )
-        assert patch.json()["sample_url"] == "https://example.com/x.mp3"
-
-    async def test_sample_redirects_when_url_set(self, client: AsyncClient) -> None:
-        vid = (
-            await client.post(
-                "/voice-models",
-                json={
-                    "name": "v",
-                    "provider": "p",
-                    "voice_id": "x",
-                    "sample_url": "https://example.com/sample.mp3",
-                },
-            )
-        ).json()["id"]
-        resp = await client.get(f"/voice-models/{vid}/sample", follow_redirects=False)
-        assert resp.status_code == 307
-        assert resp.headers["location"] == "https://example.com/sample.mp3"
-
-    async def test_sample_404_when_no_url(self, client: AsyncClient) -> None:
-        vid = (
-            await client.post(
-                "/voice-models",
-                json={"name": "v2", "provider": "p", "voice_id": "y"},
-            )
-        ).json()["id"]
-        resp = await client.get(f"/voice-models/{vid}/sample", follow_redirects=False)
-        assert resp.status_code == 404
-
-
-@pytest.mark.asyncio(loop_scope="session")
 class TestHolidays:
     async def test_crud(self, client: AsyncClient) -> None:
         created = await client.post(
@@ -143,17 +97,3 @@ class TestHolidays:
             json={"date": "not-a-date", "name": "x"},
         )
         assert bad.status_code == 422
-
-
-@pytest.mark.asyncio(loop_scope="session")
-class TestHandoffTasks:
-    async def test_empty_list(self, client: AsyncClient) -> None:
-        body = (await client.get("/handoff-tasks")).json()
-        assert body == {"items": [], "total": 0, "page": 1, "page_size": 50}
-
-    async def test_get_404(self, client: AsyncClient) -> None:
-        assert (await client.get("/handoff-tasks/9999")).status_code == 404
-
-    async def test_pickup_501(self, client: AsyncClient) -> None:
-        resp = await client.post("/handoff-tasks/1/pick-up")
-        assert resp.status_code == 501

@@ -10,8 +10,7 @@ tasks.
 - `POST /auth/login` (`username` + `password` → JWT) and `GET /auth/me`
 - CRUD: `/campaigns` (with nested `role_config` / `filler_set` / `callback_config`),
   `/campaigns/{id}/devices`, `/leads` (+ `POST /leads/import` CSV bulk),
-  `/voice-models` (+ `GET /voice-models/{id}/sample` audio stream),
-  `/holidays`, `/handoff-tasks` (read-only in v1 stage 2),
+  `/holidays`,
   `/calls` (read-only)
 - `/analytics/{answer-rate,goal-rate,duration-distribution}` SQL aggregates
 - `POST /campaigns/{id}/start` / `POST /campaigns/{id}/pause` → `CampaignControl`

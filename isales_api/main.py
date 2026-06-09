@@ -18,17 +18,14 @@ from isales_api.common.db import get_engine, get_sessionmaker
 from isales_api.common.redis import get_redis
 from isales_api.routers import (
     analytics,
-    appointments,
     calls,
     campaigns,
     edge_devices,
-    handoff_tasks,
     holidays,
     leads,
     prompt_versions,
     provider_credentials,
     role_configs,
-    voice_models,
     ws,
 )
 from isales_api.ws.manager import ConnectionManager
@@ -66,11 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(campaigns.router)
     app.include_router(leads.router)
-    app.include_router(voice_models.router)
     app.include_router(holidays.router)
-    app.include_router(handoff_tasks.router)
     app.include_router(calls.router)
-    app.include_router(appointments.router)
     app.include_router(role_configs.router)
     app.include_router(prompt_versions.router)
     app.include_router(provider_credentials.router)
