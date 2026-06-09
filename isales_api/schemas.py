@@ -12,7 +12,6 @@ from typing import Any, Generic, TypeVar
 
 from isales_common.enums import (
     ContinuousInterruptionStrategy,
-    GenerationStatus,
     RoleKind,
 )
 from isales_common.schemas._base import AppModel, ORMModel
@@ -64,22 +63,6 @@ class RoleConfigNestedWrite(AppModel):
     enabled: bool = True
 
 
-class FillerPhraseNestedWrite(AppModel):
-    phrase: str = Field(min_length=1, max_length=512)
-    audio_url: str | None = None
-    generation_status: GenerationStatus = GenerationStatus.PENDING
-
-
-class FillerPhraseRead(ORMModel):
-    id: int
-    campaign_id: int
-    phrase: str
-    audio_url: str | None = None
-    generation_status: GenerationStatus
-    created_at: datetime
-    updated_at: datetime
-
-
 class CallbackConfigNestedWrite(AppModel):
     name: str = Field(min_length=1, max_length=128)
     trigger: CallbackTrigger
@@ -97,7 +80,6 @@ class CallbackConfigNestedWrite(AppModel):
 
 class CampaignNestedCreate(CampaignBase):
     role_configs: list[RoleConfigNestedWrite] = Field(default_factory=list)
-    filler_phrases: list[FillerPhraseNestedWrite] = Field(default_factory=list)
     callback_configs: list[CallbackConfigNestedWrite] = Field(default_factory=list)
 
 
@@ -178,7 +160,7 @@ class CampaignNestedUpdate(AppModel):
     respect_holidays: bool | None = None
 
     role_configs: list[RoleConfigNestedWrite] | None = None
-    filler_phrases: list[FillerPhraseNestedWrite] | None = None
+    filler_phrases: list[str] | None = None
     callback_configs: list[CallbackConfigNestedWrite] | None = None
 
 
@@ -196,7 +178,6 @@ class RoutingRulesRead(AppModel):
 
 class CampaignDetailRead(CampaignRead):
     role_configs: list[RoleConfigRead] = Field(default_factory=list)
-    filler_phrases: list[FillerPhraseRead] = Field(default_factory=list)
     callback_configs: list[CallbackConfigRead] = Field(default_factory=list)
 
 

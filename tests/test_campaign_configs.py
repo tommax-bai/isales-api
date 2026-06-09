@@ -1,7 +1,7 @@
 """Tests for per-campaign config admin endpoints.
 
 Spec: openspec/changes/web-admin-campaign-workflow — `/role-configs`,
-`/prompt-versions`, `/filler-phrases` CRUD + `/campaigns/{id}/progress`.
+`/prompt-versions` CRUD + `/campaigns/{id}/progress`.
 """
 
 from __future__ import annotations
@@ -114,51 +114,6 @@ class TestPromptVersions:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-class TestFillerPhrases:
-    async def test_phrase_crud(
-        self, client: AsyncClient, clean_engine: AsyncEngine
-    ) -> None:
-        cid = await _seed_campaign(clean_engine)
-        ph = await client.post(
-            "/filler-phrases",
-            json={"campaign_id": cid, "phrase": "嗯嗯"},
-        )
-        assert ph.status_code == 201, ph.text
-        assert ph.json()["campaign_id"] == cid
-        pid = ph.json()["id"]
-        listed = (
-            await client.get("/filler-phrases", params={"campaign_id": cid})
-        ).json()
-        assert listed["total"] == 1
-        patched = await client.patch(
-            f"/filler-phrases/{pid}", json={"phrase": "好的好的"}
-        )
-        assert patched.json()["phrase"] == "好的好的"
-        assert (await client.delete(f"/filler-phrases/{pid}")).status_code == 204
-
-    async def test_create_unknown_campaign_404(
-        self, client: AsyncClient, clean_engine: AsyncEngine
-    ) -> None:
-        await _seed_campaign(clean_engine)
-        resp = await client.post(
-            "/filler-phrases",
-            json={"campaign_id": 999999, "phrase": "x"},
-        )
-        assert resp.status_code == 404
-
-    async def test_campaign_filter(
-        self, client: AsyncClient, clean_engine: AsyncEngine
-    ) -> None:
-        c1 = await _seed_campaign(clean_engine, "X")
-        c2 = await _seed_campaign(clean_engine, "Y")
-        await client.post("/filler-phrases", json={"campaign_id": c1, "phrase": "a"})
-        await client.post("/filler-phrases", json={"campaign_id": c2, "phrase": "b"})
-        assert (
-            await client.get("/filler-phrases", params={"campaign_id": c1})
-        ).json()["total"] == 1
-
-
-@pytest.mark.asyncio(loop_scope="session")
 class TestCampaignProgress:
     async def test_status_counts(
         self, client: AsyncClient, clean_engine: AsyncEngine
@@ -202,6 +157,6 @@ class TestConfigEndpointsAuth:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            for path in ("/role-configs", "/prompt-versions", "/filler-phrases"):
+            for path in ("/role-configs", "/prompt-versions"):
                 resp = await ac.get(path)
                 assert resp.status_code == 401, path

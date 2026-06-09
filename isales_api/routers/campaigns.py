@@ -16,7 +16,6 @@ from isales_common.models import (
     CallbackConfig,
     Campaign,
     CampaignDevice,
-    FillerPhrase,
     Lead,
     RoleConfig,
 )
@@ -51,8 +50,6 @@ from isales_api.schemas import (
     CampaignNestedCreate,
     CampaignNestedUpdate,
     CampaignProgress,
-    FillerPhraseNestedWrite,
-    FillerPhraseRead,
     Page,
     RoleConfigNestedWrite,
     RoutingRulesRead,
@@ -79,13 +76,6 @@ async def _load_detail(session: DBSession, campaign_id: int) -> CampaignDetailRe
             select(RoleConfig).where(RoleConfig.campaign_id == campaign_id)
         )
     ).scalars().all()
-    filler_phrase_rows = (
-        await session.execute(
-            select(FillerPhrase)
-            .where(FillerPhrase.campaign_id == campaign_id)
-            .order_by(FillerPhrase.id)
-        )
-    ).scalars().all()
     callback_rows = (
         await session.execute(
             select(CallbackConfig).where(CallbackConfig.campaign_id == campaign_id)
@@ -95,14 +85,13 @@ async def _load_detail(session: DBSession, campaign_id: int) -> CampaignDetailRe
     return CampaignDetailRead(
         **{c.name: getattr(campaign, c.name) for c in Campaign.__table__.columns},
         role_configs=[RoleConfigRead.model_validate(r) for r in role_rows],
-        filler_phrases=[FillerPhraseRead.model_validate(p) for p in filler_phrase_rows],
         callback_configs=[CallbackConfigRead.model_validate(c) for c in callback_rows],
     )
 
 
 def _campaign_base_fields(payload: CampaignNestedCreate) -> dict[str, object]:
     """Pluck all CampaignBase fields (excluding the nested children)."""
-    excluded = {"role_configs", "filler_phrases", "callback_configs"}
+    excluded = {"role_configs", "callback_configs"}
     return payload.model_dump(exclude=excluded)
 
 
@@ -163,7 +152,6 @@ async def _replace_children(
     campaign_id: int,
     *,
     role_configs: list[RoleConfigNestedWrite] | None,
-    filler_phrases: list[FillerPhraseNestedWrite] | None,
     callback_configs: list[CallbackConfigNestedWrite] | None,
 ) -> None:
     if role_configs is not None:
@@ -172,13 +160,6 @@ async def _replace_children(
         )
         for rc in role_configs:
             session.add(RoleConfig(campaign_id=campaign_id, **rc.model_dump()))
-
-    if filler_phrases is not None:
-        await session.execute(
-            delete(FillerPhrase).where(FillerPhrase.campaign_id == campaign_id)
-        )
-        for ph in filler_phrases:
-            session.add(FillerPhrase(campaign_id=campaign_id, **ph.model_dump()))
 
     if callback_configs is not None:
         await session.execute(
@@ -262,7 +243,6 @@ async def create_campaign(
         session,
         campaign.id,
         role_configs=payload.role_configs,
-        filler_phrases=payload.filler_phrases,
         callback_configs=payload.callback_configs,
     )
     await session.flush()
@@ -345,7 +325,7 @@ async def update_campaign(
     )
     base_fields = payload.model_dump(
         exclude_unset=True,
-        exclude={"role_configs", "filler_phrases", "callback_configs"},
+        exclude={"role_configs", "callback_configs"},
     )
     for k, v in base_fields.items():
         setattr(campaign, k, v)
@@ -353,7 +333,6 @@ async def update_campaign(
         session,
         campaign_id,
         role_configs=payload.role_configs,
-        filler_phrases=payload.filler_phrases,
         callback_configs=payload.callback_configs,
     )
     await session.flush()

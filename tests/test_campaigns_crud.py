@@ -8,7 +8,6 @@ from isales_common.models import (
     CallbackConfig,
     Campaign,
     Device,
-    FillerPhrase,
     RoleConfig,
 )
 from sqlalchemy import select
@@ -51,10 +50,7 @@ class TestCampaignNestedCRUD:
                 {"kind": "main", "model": "gpt-4o-mini"},
                 {"kind": "referee", "model": "gpt-4o-mini", "label": "main_judge"},
             ],
-            filler_phrases=[
-                {"phrase": "嗯嗯"},
-                {"phrase": "稍等"},
-            ],
+            filler_phrases=["嗯嗯", "稍等"],
             callback_configs=[
                 {
                     "name": "wh1",
@@ -85,7 +81,7 @@ class TestCampaignNestedCRUD:
                 json=_campaign_payload(
                     name="C2",
                     role_configs=[{"kind": "main", "model": "old"}],
-                    filler_phrases=[{"phrase": "old"}],
+                    filler_phrases=["old"],
                 ),
             )
         ).json()["id"]
@@ -95,7 +91,7 @@ class TestCampaignNestedCRUD:
             json={
                 "name": "C2-renamed",
                 "role_configs": [{"kind": "extractor", "model": "new"}],
-                "filler_phrases": [{"phrase": "new1"}, {"phrase": "new2"}],
+                "filler_phrases": ["new1", "new2"],
             },
         )
         assert patch.status_code == 200
@@ -114,12 +110,8 @@ class TestCampaignNestedCRUD:
                 )
             ).scalars().all()
             assert len(old_role_count) == 1  # only 'extractor' survives
-            phrases = (
-                await session.execute(
-                    select(FillerPhrase).where(FillerPhrase.campaign_id == cid)
-                )
-            ).scalars().all()
-            assert len(phrases) == 2
+            # filler_phrases is now a campaign column (list[str]) — its
+            # replacement is asserted via the API response above.
 
     async def test_delete_cascades_children(
         self, client: AsyncClient, clean_engine: AsyncEngine
@@ -130,7 +122,7 @@ class TestCampaignNestedCRUD:
                 json=_campaign_payload(
                     name="C3",
                     role_configs=[{"kind": "main", "model": "x"}],
-                    filler_phrases=[{"phrase": "p"}],
+                    filler_phrases=["p"],
                     callback_configs=[
                         {
                             "name": "cb",
@@ -150,7 +142,7 @@ class TestCampaignNestedCRUD:
 
         sm = async_sessionmaker(clean_engine, expire_on_commit=False)
         async with sm() as session:
-            for model in (Campaign, RoleConfig, FillerPhrase, CallbackConfig):
+            for model in (Campaign, RoleConfig, CallbackConfig):
                 rows = (await session.execute(select(model))).scalars().all()
                 assert rows == [], f"{model.__name__} not cascaded"
 
