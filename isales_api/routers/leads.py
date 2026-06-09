@@ -32,7 +32,7 @@ async def list_leads(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> Page[LeadRead]:
-    stmt = select(Lead).order_by(Lead.id)
+    stmt = select(Lead).order_by(Lead.id.desc())
     count_stmt = select(func.count()).select_from(Lead)
     if campaign_id is not None:
         stmt = stmt.where(Lead.campaign_id == campaign_id)
