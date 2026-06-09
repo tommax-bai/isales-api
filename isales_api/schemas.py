@@ -70,27 +70,12 @@ class FillerPhraseNestedWrite(AppModel):
     generation_status: GenerationStatus = GenerationStatus.PENDING
 
 
-class FillerSetNestedWrite(AppModel):
-    name: str = Field(min_length=1, max_length=128)
-    sort_order: int = 0
-    phrases: list[FillerPhraseNestedWrite] = Field(default_factory=list)
-
-
 class FillerPhraseRead(ORMModel):
     id: int
-    filler_set_id: int
+    campaign_id: int
     phrase: str
     audio_url: str | None = None
     generation_status: GenerationStatus
-    created_at: datetime
-    updated_at: datetime
-
-
-class FillerSetRead(ORMModel):
-    id: int
-    campaign_id: int
-    name: str
-    sort_order: int
     created_at: datetime
     updated_at: datetime
 
@@ -112,7 +97,7 @@ class CallbackConfigNestedWrite(AppModel):
 
 class CampaignNestedCreate(CampaignBase):
     role_configs: list[RoleConfigNestedWrite] = Field(default_factory=list)
-    filler_sets: list[FillerSetNestedWrite] = Field(default_factory=list)
+    filler_phrases: list[FillerPhraseNestedWrite] = Field(default_factory=list)
     callback_configs: list[CallbackConfigNestedWrite] = Field(default_factory=list)
 
 
@@ -193,7 +178,7 @@ class CampaignNestedUpdate(AppModel):
     respect_holidays: bool | None = None
 
     role_configs: list[RoleConfigNestedWrite] | None = None
-    filler_sets: list[FillerSetNestedWrite] | None = None
+    filler_phrases: list[FillerPhraseNestedWrite] | None = None
     callback_configs: list[CallbackConfigNestedWrite] | None = None
 
 
@@ -209,13 +194,9 @@ class RoutingRulesRead(AppModel):
     max_continuous_restructure: int = 2
 
 
-class FillerSetWithPhrasesRead(FillerSetRead):
-    phrases: list[FillerPhraseRead] = Field(default_factory=list)
-
-
 class CampaignDetailRead(CampaignRead):
     role_configs: list[RoleConfigRead] = Field(default_factory=list)
-    filler_sets: list[FillerSetWithPhrasesRead] = Field(default_factory=list)
+    filler_phrases: list[FillerPhraseRead] = Field(default_factory=list)
     callback_configs: list[CallbackConfigRead] = Field(default_factory=list)
 
 

@@ -9,7 +9,6 @@ from isales_common.models import (
     Campaign,
     Device,
     FillerPhrase,
-    FillerSet,
     RoleConfig,
 )
 from sqlalchemy import select
@@ -37,7 +36,7 @@ def _campaign_payload(**overrides: object) -> dict[str, object]:
         "do_not_call_llm_enabled": False,
         "respect_holidays": True,
         "role_configs": [],
-        "filler_sets": [],
+        "filler_phrases": [],
         "callback_configs": [],
     }
     base.update(overrides)
@@ -52,15 +51,9 @@ class TestCampaignNestedCRUD:
                 {"kind": "main", "model": "gpt-4o-mini"},
                 {"kind": "referee", "model": "gpt-4o-mini", "label": "main_judge"},
             ],
-            filler_sets=[
-                {
-                    "name": "polite",
-                    "sort_order": 1,
-                    "phrases": [
-                        {"phrase": "嗯嗯"},
-                        {"phrase": "稍等"},
-                    ],
-                }
+            filler_phrases=[
+                {"phrase": "嗯嗯"},
+                {"phrase": "稍等"},
             ],
             callback_configs=[
                 {
@@ -80,8 +73,7 @@ class TestCampaignNestedCRUD:
         assert get_resp.status_code == 200
         detail = get_resp.json()
         assert len(detail["role_configs"]) == 2
-        assert len(detail["filler_sets"]) == 1
-        assert len(detail["filler_sets"][0]["phrases"]) == 2
+        assert len(detail["filler_phrases"]) == 2
         assert len(detail["callback_configs"]) == 1
 
     async def test_patch_replaces_children_fully(
@@ -93,7 +85,7 @@ class TestCampaignNestedCRUD:
                 json=_campaign_payload(
                     name="C2",
                     role_configs=[{"kind": "main", "model": "old"}],
-                    filler_sets=[{"name": "old", "phrases": [{"phrase": "old"}]}],
+                    filler_phrases=[{"phrase": "old"}],
                 ),
             )
         ).json()["id"]
@@ -103,9 +95,7 @@ class TestCampaignNestedCRUD:
             json={
                 "name": "C2-renamed",
                 "role_configs": [{"kind": "extractor", "model": "new"}],
-                "filler_sets": [
-                    {"name": "new", "phrases": [{"phrase": "new1"}, {"phrase": "new2"}]}
-                ],
+                "filler_phrases": [{"phrase": "new1"}, {"phrase": "new2"}],
             },
         )
         assert patch.status_code == 200
@@ -113,7 +103,7 @@ class TestCampaignNestedCRUD:
         assert body["name"] == "C2-renamed"
         assert len(body["role_configs"]) == 1
         assert body["role_configs"][0]["kind"] == "extractor"
-        assert len(body["filler_sets"][0]["phrases"]) == 2
+        assert len(body["filler_phrases"]) == 2
 
         # Confirm cascading delete via direct DB read.
         sm = async_sessionmaker(clean_engine, expire_on_commit=False)
@@ -126,9 +116,7 @@ class TestCampaignNestedCRUD:
             assert len(old_role_count) == 1  # only 'extractor' survives
             phrases = (
                 await session.execute(
-                    select(FillerPhrase).join(FillerSet).where(
-                        FillerSet.campaign_id == cid
-                    )
+                    select(FillerPhrase).where(FillerPhrase.campaign_id == cid)
                 )
             ).scalars().all()
             assert len(phrases) == 2
@@ -142,7 +130,7 @@ class TestCampaignNestedCRUD:
                 json=_campaign_payload(
                     name="C3",
                     role_configs=[{"kind": "main", "model": "x"}],
-                    filler_sets=[{"name": "fs", "phrases": [{"phrase": "p"}]}],
+                    filler_phrases=[{"phrase": "p"}],
                     callback_configs=[
                         {
                             "name": "cb",
@@ -162,7 +150,7 @@ class TestCampaignNestedCRUD:
 
         sm = async_sessionmaker(clean_engine, expire_on_commit=False)
         async with sm() as session:
-            for model in (Campaign, RoleConfig, FillerSet, FillerPhrase, CallbackConfig):
+            for model in (Campaign, RoleConfig, FillerPhrase, CallbackConfig):
                 rows = (await session.execute(select(model))).scalars().all()
                 assert rows == [], f"{model.__name__} not cascaded"
 

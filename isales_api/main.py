@@ -22,7 +22,7 @@ from isales_api.routers import (
     calls,
     campaigns,
     edge_devices,
-    filler_sets,
+    filler_phrases,
     handoff_tasks,
     holidays,
     leads,
@@ -74,7 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(appointments.router)
     app.include_router(role_configs.router)
     app.include_router(prompt_versions.router)
-    app.include_router(filler_sets.router)
+    app.include_router(filler_phrases.router)
     app.include_router(provider_credentials.router)
     app.include_router(analytics.router)
     app.include_router(edge_devices.router)

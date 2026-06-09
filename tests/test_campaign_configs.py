@@ -1,7 +1,7 @@
 """Tests for per-campaign config admin endpoints.
 
 Spec: openspec/changes/web-admin-campaign-workflow — `/role-configs`,
-`/prompt-versions`, `/filler-sets` CRUD + `/campaigns/{id}/progress`.
+`/prompt-versions`, `/filler-phrases` CRUD + `/campaigns/{id}/progress`.
 """
 
 from __future__ import annotations
@@ -114,56 +114,47 @@ class TestPromptVersions:
 
 
 @pytest.mark.asyncio(loop_scope="session")
-class TestFillerSets:
-    async def test_set_and_phrase_crud(
+class TestFillerPhrases:
+    async def test_phrase_crud(
         self, client: AsyncClient, clean_engine: AsyncEngine
     ) -> None:
         cid = await _seed_campaign(clean_engine)
-        fs = (
-            await client.post(
-                "/filler-sets",
-                json={"campaign_id": cid, "name": "默认垫词", "sort_order": 0},
-            )
-        ).json()
-        sid = fs["id"]
         ph = await client.post(
-            f"/filler-sets/{sid}/phrases",
-            json={"filler_set_id": sid, "phrase": "嗯嗯"},
+            "/filler-phrases",
+            json={"campaign_id": cid, "phrase": "嗯嗯"},
         )
         assert ph.status_code == 201, ph.text
+        assert ph.json()["campaign_id"] == cid
         pid = ph.json()["id"]
-        assert len((await client.get(f"/filler-sets/{sid}/phrases")).json()) == 1
+        listed = (
+            await client.get("/filler-phrases", params={"campaign_id": cid})
+        ).json()
+        assert listed["total"] == 1
         patched = await client.patch(
-            f"/filler-sets/phrases/{pid}", json={"phrase": "好的好的"}
+            f"/filler-phrases/{pid}", json={"phrase": "好的好的"}
         )
         assert patched.json()["phrase"] == "好的好的"
-        assert (await client.delete(f"/filler-sets/phrases/{pid}")).status_code == 204
-        assert (await client.delete(f"/filler-sets/{sid}")).status_code == 204
+        assert (await client.delete(f"/filler-phrases/{pid}")).status_code == 204
 
-    async def test_phrase_path_body_mismatch_400(
+    async def test_create_unknown_campaign_404(
         self, client: AsyncClient, clean_engine: AsyncEngine
     ) -> None:
-        cid = await _seed_campaign(clean_engine)
-        sid = (
-            await client.post(
-                "/filler-sets", json={"campaign_id": cid, "name": "s"}
-            )
-        ).json()["id"]
+        await _seed_campaign(clean_engine)
         resp = await client.post(
-            f"/filler-sets/{sid}/phrases",
-            json={"filler_set_id": sid + 999, "phrase": "x"},
+            "/filler-phrases",
+            json={"campaign_id": 999999, "phrase": "x"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
 
     async def test_campaign_filter(
         self, client: AsyncClient, clean_engine: AsyncEngine
     ) -> None:
         c1 = await _seed_campaign(clean_engine, "X")
         c2 = await _seed_campaign(clean_engine, "Y")
-        await client.post("/filler-sets", json={"campaign_id": c1, "name": "a"})
-        await client.post("/filler-sets", json={"campaign_id": c2, "name": "b"})
+        await client.post("/filler-phrases", json={"campaign_id": c1, "phrase": "a"})
+        await client.post("/filler-phrases", json={"campaign_id": c2, "phrase": "b"})
         assert (
-            await client.get("/filler-sets", params={"campaign_id": c1})
+            await client.get("/filler-phrases", params={"campaign_id": c1})
         ).json()["total"] == 1
 
 
@@ -211,6 +202,6 @@ class TestConfigEndpointsAuth:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            for path in ("/role-configs", "/prompt-versions", "/filler-sets"):
+            for path in ("/role-configs", "/prompt-versions", "/filler-phrases"):
                 resp = await ac.get(path)
                 assert resp.status_code == 401, path
