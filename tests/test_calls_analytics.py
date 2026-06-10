@@ -75,6 +75,82 @@ class TestCalls:
 
 
 @pytest.mark.asyncio(loop_scope="session")
+class TestTranscriptSchemaContract:
+    """Regression for fix-transcript-schema-drift: GET /calls validates every
+    record's transcript with CallRecordRead (extra="forbid"). A record whose
+    transcript carries a state_warning event MUST read back 200; an ai_reply
+    event MUST NOT carry an `interrupted` field (engine no longer writes it).
+    """
+
+    async def test_list_reads_transcript_with_state_warning(
+        self, client: AsyncClient, clean_engine: AsyncEngine
+    ) -> None:
+        sm = async_sessionmaker(clean_engine, expire_on_commit=False)
+        async with sm() as session:
+            c = Campaign(name="T")
+            session.add(c)
+            await session.flush()
+            lead = Lead(campaign_id=c.id, phone="+861380001")
+            session.add(lead)
+            await session.flush()
+            session.add(
+                CallRecord(
+                    lead_id=lead.id,
+                    campaign_id=c.id,
+                    started_at=datetime.now(tz=UTC),
+                    duration=42,
+                    transcript=[
+                        {"type": "greeting", "ts": 0, "text": "您好"},
+                        {"type": "user_speech", "ts": 100, "text": "你好"},
+                        {
+                            "type": "ai_reply",
+                            "ts": 200,
+                            "text": "好的",
+                            "turn_id": 1,
+                        },
+                        {
+                            "type": "state_warning",
+                            "ts": 300,
+                            "attempted": "bug",
+                            "from_state": "in_call",
+                            "to_state": "transferring",
+                        },
+                        {"type": "hangup", "ts": 400, "reason": "user_hangup",
+                         "initiated_by": "user"},
+                    ],
+                )
+            )
+            await session.commit()
+
+        resp = await client.get("/calls", params={"campaign_id": c.id})
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        types = [e["type"] for e in items[0]["transcript"]]
+        assert "state_warning" in types
+        ai = next(e for e in items[0]["transcript"] if e["type"] == "ai_reply")
+        assert "interrupted" not in ai
+
+    async def test_ai_reply_with_interrupted_is_rejected(self) -> None:
+        from isales_common.schemas.call import CallRecordRead
+        from pydantic import ValidationError
+
+        now = datetime.now(tz=UTC)
+        base = {
+            "id": 1, "lead_id": 1, "campaign_id": 1, "status": "end",
+            "transfer_status": "none", "created_at": now, "updated_at": now,
+            "transcript": [
+                {"type": "ai_reply", "ts": 1, "text": "x", "turn_id": 1,
+                 "interrupted": False},
+            ],
+        }
+        with pytest.raises(ValidationError) as exc:
+            CallRecordRead.model_validate(base)
+        # The only contract violation is the extra `interrupted` key.
+        assert "interrupted" in str(exc.value)
+
+
+@pytest.mark.asyncio(loop_scope="session")
 class TestAnalytics:
     async def test_answer_rate(
         self, client: AsyncClient, clean_engine: AsyncEngine
