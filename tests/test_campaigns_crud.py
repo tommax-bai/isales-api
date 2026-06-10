@@ -202,6 +202,25 @@ class TestCampaignNestedCRUD:
         assert patched.status_code == 200
         assert patched.json()["filler_delay_ms"] == 800
 
+    async def test_interruption_min_chars_create_default_and_patch(
+        self, client: AsyncClient
+    ) -> None:
+        # Locks the new column through the api write→ORM→read path; PATCH guards
+        # against CampaignNestedUpdate allowlist drift silently dropping it.
+        cid = (
+            await client.post("/campaigns", json=_campaign_payload(name="CMC"))
+        ).json()["id"]
+        detail = (await client.get(f"/campaigns/{cid}")).json()
+        assert detail["interruption_min_chars"] == 2  # CampaignBase default
+        patched = await client.patch(
+            f"/campaigns/{cid}", json={"interruption_min_chars": 7}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["interruption_min_chars"] == 7
+        assert (await client.get(f"/campaigns/{cid}")).json()[
+            "interruption_min_chars"
+        ] == 7
+
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestCampaignDevices:

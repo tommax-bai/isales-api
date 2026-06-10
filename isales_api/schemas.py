@@ -134,6 +134,7 @@ class CampaignNestedUpdate(AppModel):
     interruption_rules: InterruptionRule | None = None
     interruption_whitelist: list[str] | None = None
     interruption_min_duration_ms: int | None = None
+    interruption_min_chars: int | None = Field(default=None, ge=1)
     max_continuous_interruptions: int | None = None
     continuous_interruption_strategy: ContinuousInterruptionStrategy | None = None
 
