@@ -116,7 +116,6 @@ class CampaignNestedUpdate(AppModel):
     silence_threshold_ms: int | None = None
     silence_phrases: list[str] | None = None
     silence_hangup_phrase: str | None = None
-    max_no_progress_seconds: int | None = None
 
     # ASR EOS endpoint threshold in ms (pipeline-latency-tail § A). NULL →
     # engine default 400ms.
