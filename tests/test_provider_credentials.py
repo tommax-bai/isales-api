@@ -42,11 +42,11 @@ class TestProviderCredentialsRouter:
         # 同 (provider_id, field_name) 两次 upsert → 行数不增
         await client.post(
             "/provider-credentials",
-            json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-aaaa"},
+            json={"provider_id": "dashscope", "field_name": "api_key", "plaintext_value": "sk-aaaa"},
         )
         r2 = await client.post(
             "/provider-credentials",
-            json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-bbbb"},
+            json={"provider_id": "dashscope", "field_name": "api_key", "plaintext_value": "sk-bbbb"},
         )
         assert r2.status_code == 201
         # 列表应只有 1 行 (upsert 覆盖)
@@ -93,7 +93,7 @@ class TestProviderCredentialsRouter:
         )
         await client.post(
             "/provider-credentials",
-            json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-openai123"},
+            json={"provider_id": "dashscope", "field_name": "api_key", "plaintext_value": "sk-dashscope123"},
         )
         r = await client.get("/provider-credentials/volcengine")
         assert r.status_code == 200
@@ -110,7 +110,7 @@ class TestProviderCredentialsRouter:
     async def test_delete(self, client: AsyncClient):
         r = await client.post(
             "/provider-credentials",
-            json={"provider_id": "openai", "field_name": "api_key", "plaintext_value": "sk-tobedeleted"},
+            json={"provider_id": "dashscope", "field_name": "api_key", "plaintext_value": "sk-tobedeleted"},
         )
         cred_id = r.json()["id"]
 

@@ -34,11 +34,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/provider-credentials", tags=["provider-credentials"])
 
 # 与 isales-engine `providers/factory.py::KNOWN_*_PROVIDERS` 同步。新增 provider 时两端必须一起改。
-ALLOWED_PROVIDER_IDS = frozenset({"volcengine", "openai", "dashscope", "mock"})
+ALLOWED_PROVIDER_IDS = frozenset({"volcengine", "dashscope", "mock"})
 
 ALLOWED_FIELD_NAMES = frozenset(
     {
-        "api_key",          # openai / dashscope
+        "api_key",          # dashscope
         "app_key",          # volcengine (与 app_token 配对)
         "app_token",        # volcengine
         "endpoint",         # 通用 base url
