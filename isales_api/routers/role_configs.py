@@ -3,9 +3,11 @@
 Spec: openspec/changes/archive/2026-06-05-engine-multi-referee-and-restructure —
 capability `web-admin-ui`. A campaign has exactly one main / one extractor slot,
 an optional single restructure slot, and **N referee slots** (was a single
-referee pre-multi-referee). ``referee`` and ``restructure`` rows carry a
-``label`` (unique per campaign) that ``campaign.routing_rules`` bind to; deleting
-a still-referenced referee is rejected (409). ``kind`` is validated against the
+referee pre-multi-referee). ``referee`` rows carry a ``label`` (unique per
+campaign) that ``campaign.routing_rules`` bind to; deleting a still-referenced
+referee is rejected (409). (per-role-llm-config-and-restructure-card: the
+singleton ``restructure`` slot is routed via the builtin route, not by label, so
+it carries no required label.) ``kind`` is validated against the
 ``RoleKind`` enum, so the old ``role`` / ``judge`` / ``polish`` values are
 rejected automatically.
 """
@@ -35,8 +37,12 @@ router = APIRouter(prefix="/role-configs", tags=["role-configs"])
 # (engine-tools-multidialogue-gating). A referee "warm" and a persona "warm"
 # may coexist.
 _PERSONA_KINDS = {RoleKind.PERSONA.value}
-_REFEREE_RESTRUCTURE_KINDS = {RoleKind.REFEREE.value, RoleKind.RESTRUCTURE.value}
-_LABELLED_KINDS = _PERSONA_KINDS | _REFEREE_RESTRUCTURE_KINDS
+# per-role-llm-config-and-restructure-card: RESTRUCTURE dropped from labelled kinds
+# — it is a singleton slot reached via the builtin ``restructure`` route (not by
+# label), so the standalone CRUD MUST NOT require a label for it (mirrors
+# routing_validation._LABELLED_KINDS).
+_REFEREE_KINDS = {RoleKind.REFEREE.value}
+_LABELLED_KINDS = _PERSONA_KINDS | _REFEREE_KINDS
 
 
 async def _require_unique_label(
@@ -47,15 +53,16 @@ async def _require_unique_label(
     *,
     exclude_id: int | None = None,
 ) -> None:
-    """referee/restructure/persona rows MUST carry a non-empty label, unique per
-    campaign WITHIN their namespace (persona isolated from referee/restructure)."""
+    """referee/persona rows MUST carry a non-empty label, unique per campaign
+    WITHIN their namespace (persona isolated from referee). restructure is a
+    singleton routed via the builtin route, so it requires no label."""
     if kind not in _LABELLED_KINDS:
         return
     if not (label and label.strip()):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, detail="role_label_required"
         )
-    namespace = _PERSONA_KINDS if kind in _PERSONA_KINDS else _REFEREE_RESTRUCTURE_KINDS
+    namespace = _PERSONA_KINDS if kind in _PERSONA_KINDS else _REFEREE_KINDS
     stmt = select(func.count()).select_from(RoleConfig).where(
         RoleConfig.campaign_id == campaign_id,
         RoleConfig.label == label,

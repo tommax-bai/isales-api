@@ -77,6 +77,16 @@ class TestMultiRefereeCRUD:
         r = await _post_role(client, cid, "restructure", "rewrite")
         assert r.status_code == 201, r.text
 
+    async def test_restructure_without_label_accepted(
+        self, client: AsyncClient, clean_engine: AsyncEngine
+    ) -> None:
+        # per-role-llm-config-and-restructure-card: restructure is a singleton slot
+        # routed via the builtin route, so the standalone POST /role-configs MUST
+        # NOT require a label (this is the 422 the web restructure card hit).
+        cid = await _seed_campaign(clean_engine)
+        r = await _post_role(client, cid, "restructure", None)
+        assert r.status_code == 201, r.text
+
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestRoutingRulesEndpoint:
