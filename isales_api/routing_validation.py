@@ -4,12 +4,14 @@ Spec: openspec/changes/engine-multi-referee-and-restructure — capability
 `web-admin-ui` / `data-model`. The RoutingRule pydantic schema already enforces
 action shape (transition target / goal_type / restructure source / route /
 tool); these helpers add the cross-entity checks the schema can't do alone:
-referee/restructure/persona rows need a non-empty unique label, and every
-routing rule must reference a referee + (for route/tool actions) a persona label
-or tool alias that actually exists on the campaign.
+referee/persona rows need a non-empty unique label, and every routing rule must
+reference a referee + (for route/tool actions) a persona label or tool alias that
+actually exists on the campaign. (per-role-llm-config-and-restructure-card:
+restructure rows are singleton + routed via the builtin ``restructure`` route, so
+they no longer require a label.)
 
 engine-tools-multidialogue-gating: persona rows are labelled too, but the
-persona label namespace is INDEPENDENT of the referee/restructure namespace
+persona label namespace is INDEPENDENT of the referee namespace
 (a referee "warm" and a persona "warm" may coexist — addressed by kind + label).
 Route actions may target a persona label or a builtin dialogue route
 (closing / recovery / restructure); tool actions must target a campaign.tools
@@ -27,7 +29,10 @@ from isales_common.schemas.jsonb import RoutePersonaAction, RouteToolAction, Rou
 
 # Kinds that require a non-empty label. Uniqueness is namespace-scoped (see
 # ``_label_namespace``) so persona labels don't collide with referee labels.
-_LABELLED_KINDS = {RoleKind.REFEREE, RoleKind.RESTRUCTURE, RoleKind.PERSONA}
+# per-role-llm-config-and-restructure-card: RESTRUCTURE dropped — restructure is
+# a singleton slot reached via the builtin ``restructure`` route (not by label),
+# so a label is vestigial and no longer required.
+_LABELLED_KINDS = {RoleKind.REFEREE, RoleKind.PERSONA}
 
 # Builtin dialogue routes a route action may name directly (besides persona labels).
 _BUILTIN_ROUTES = {"closing", "recovery", "restructure"}
@@ -42,13 +47,13 @@ def _label_of(rc: Any) -> str | None:
 
 
 def _label_namespace(kind: str) -> str:
-    """persona labels are isolated; referee + restructure share one namespace."""
-    return "persona" if kind == RoleKind.PERSONA.value else "referee_restructure"
+    """persona labels are isolated from the referee label namespace."""
+    return "persona" if kind == RoleKind.PERSONA.value else "referee"
 
 
 def validate_role_labels(role_configs: Iterable[Any]) -> None:
-    """referee/restructure/persona rows MUST carry a non-empty label, unique per
-    campaign WITHIN their namespace.
+    """referee/persona rows MUST carry a non-empty label, unique per campaign
+    WITHIN their namespace (restructure is singleton + label-free).
 
     Accepts both api NestedWrite DTOs and ORM RoleConfig rows (both expose
     ``kind`` + ``label``).

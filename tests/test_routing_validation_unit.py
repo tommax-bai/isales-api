@@ -117,6 +117,12 @@ def test_persona_without_label_rejected():
     assert ei.value.detail == "role_label_required"
 
 
+def test_restructure_without_label_accepted():
+    # per-role-llm-config-and-restructure-card: restructure is singleton + routed
+    # via the builtin route, so it no longer requires a label (must NOT raise).
+    validate_role_labels([_rc(RoleKind.RESTRUCTURE, None)])
+
+
 def test_persona_labels_of_filters_kind():
     rcs = [
         _rc(RoleKind.PERSONA, "warm"),
