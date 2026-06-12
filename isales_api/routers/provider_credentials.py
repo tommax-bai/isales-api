@@ -34,16 +34,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/provider-credentials", tags=["provider-credentials"])
 
 # 与 isales-engine `providers/factory.py::KNOWN_*_PROVIDERS` 同步。新增 provider 时两端必须一起改。
-ALLOWED_PROVIDER_IDS = frozenset({"volcengine", "dashscope", "mock"})
+# split-model-and-speech-provider-config: 火山两条产品线两套密钥拆成两个
+# provider_id —— `volcengine` = 火山方舟 Ark LLM, `volcengine_speech` = 豆包语音
+# ASR/TTS。二者 MUST NOT 共用同一 provider_id。
+ALLOWED_PROVIDER_IDS = frozenset(
+    {"volcengine", "volcengine_speech", "dashscope", "mock"}
+)
 
 ALLOWED_FIELD_NAMES = frozenset(
     {
-        "api_key",          # dashscope
-        "app_key",          # volcengine (与 app_token 配对)
-        "app_token",        # volcengine
+        "api_key",          # dashscope / volcengine(ark) / volcengine_speech(X-Api-Key)
+        "app_key",          # volcengine_speech (与 app_token 配对)
+        "app_token",        # volcengine_speech
         "endpoint",         # 通用 base url
-        "asr_endpoint",     # volcengine ASR-specific
-        "tts_endpoint",     # volcengine TTS-specific
+        "asr_endpoint",     # volcengine_speech ASR-specific
+        "tts_endpoint",     # volcengine_speech TTS-specific
+        "asr_resource_id",  # volcengine_speech ASR 模型 SKU
+        "tts_resource_id",  # volcengine_speech TTS 模型 SKU
         "default_model",    # 默认 model name
         "enabled",          # "true" / "false"
     }

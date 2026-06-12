@@ -57,6 +57,31 @@ class TestProviderCredentialsRouter:
         # masked 反映新值
         assert rows[0]["masked_value"] == "********"  # "sk-bbbb" 长度 7 < 8 → 全 mask
 
+    async def test_volcengine_speech_provider_accepted(self, client: AsyncClient):
+        # split-model-and-speech-provider-config: 语音 provider_id 白名单含
+        # volcengine_speech, 且 tts_resource_id 是合法 field_name。
+        r = await client.post(
+            "/provider-credentials",
+            json={
+                "provider_id": "volcengine_speech",
+                "field_name": "app_token",
+                "plaintext_value": "speech-token-abcdef1234",
+            },
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["provider_id"] == "volcengine_speech"
+
+        r2 = await client.post(
+            "/provider-credentials",
+            json={
+                "provider_id": "volcengine_speech",
+                "field_name": "tts_resource_id",
+                "plaintext_value": "seed-tts-2.0",
+            },
+        )
+        assert r2.status_code == 201, r2.text
+        assert r2.json()["field_name"] == "tts_resource_id"
+
     async def test_unknown_provider_id_rejected(self, client: AsyncClient):
         r = await client.post(
             "/provider-credentials",
