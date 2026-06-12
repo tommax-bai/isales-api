@@ -101,6 +101,9 @@ class CampaignNestedUpdate(AppModel):
     # multi-referee routing (engine-multi-referee-and-restructure).
     routing_rules: list[RoutingRule] | None = None
     max_continuous_restructure: int | None = Field(default=None, ge=0)
+    # engine-auto-restructure-on-interrupt: declared here or the bulk
+    # model_dump(exclude_unset) PATCH apply would silently drop it.
+    auto_restructure_on_interrupt: bool | None = None
 
     # gating + multi-persona (engine-tools-multidialogue-gating). update_campaign
     # reads payload.tools unconditionally — these MUST be declared here or every

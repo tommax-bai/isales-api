@@ -221,6 +221,26 @@ class TestCampaignNestedCRUD:
             "interruption_min_chars"
         ] == 7
 
+    async def test_auto_restructure_on_interrupt_create_default_and_patch(
+        self, client: AsyncClient
+    ) -> None:
+        # engine-auto-restructure-on-interrupt: locks the new bool through the
+        # api write→ORM→read path; PATCH guards against CampaignNestedUpdate
+        # allowlist drift silently dropping it.
+        cid = (
+            await client.post("/campaigns", json=_campaign_payload(name="ARI"))
+        ).json()["id"]
+        detail = (await client.get(f"/campaigns/{cid}")).json()
+        assert detail["auto_restructure_on_interrupt"] is False  # CampaignBase default
+        patched = await client.patch(
+            f"/campaigns/{cid}", json={"auto_restructure_on_interrupt": True}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["auto_restructure_on_interrupt"] is True
+        assert (await client.get(f"/campaigns/{cid}")).json()[
+            "auto_restructure_on_interrupt"
+        ] is True
+
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestCampaignDevices:
