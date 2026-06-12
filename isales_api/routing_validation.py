@@ -14,8 +14,8 @@ engine-tools-multidialogue-gating: persona rows are labelled too, but the
 persona label namespace is INDEPENDENT of the referee namespace
 (a referee "warm" and a persona "warm" may coexist — addressed by kind + label).
 Route actions may target a persona label or a builtin dialogue route
-(closing / recovery / restructure); tool actions must target a campaign.tools
-alias.
+(closing / recovery); tool actions must target a campaign.tools alias.
+(engine-auto-restructure-on-interrupt removed ``restructure`` as a route target.)
 """
 
 from __future__ import annotations
@@ -34,8 +34,11 @@ from isales_common.schemas.jsonb import RoutePersonaAction, RouteToolAction, Rou
 # so a label is vestigial and no longer required.
 _LABELLED_KINDS = {RoleKind.REFEREE, RoleKind.PERSONA}
 
-# Builtin dialogue routes a route action may name directly (besides persona labels).
-_BUILTIN_ROUTES = {"closing", "recovery", "restructure"}
+# Builtin dialogue routes a route action may name directly (besides persona
+# labels). engine-auto-restructure-on-interrupt: ``restructure`` removed — it is
+# no longer a routing target (reached only via the auto_restructure_on_interrupt
+# switch), so ``route to=restructure`` now 422s as an unknown route.
+_BUILTIN_ROUTES = {"closing", "recovery"}
 
 
 def _kind_value(kind: Any) -> str:

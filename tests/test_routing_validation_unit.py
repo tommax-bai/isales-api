@@ -41,9 +41,24 @@ def test_route_to_known_persona_ok():
 
 
 def test_route_to_builtin_ok():
-    for builtin in ("closing", "recovery", "restructure"):
+    for builtin in ("closing", "recovery"):
         validate_routing_rules(
             [_rule("j", ["x"], {"type": "route", "to": builtin})],
+            {"j"},
+            persona_labels=set(),
+            tool_aliases=set(),
+        )
+
+
+def test_route_to_restructure_now_422():
+    # engine-auto-restructure-on-interrupt: restructure is no longer a routable
+    # builtin — reached only via the auto_restructure_on_interrupt switch.
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException):
+        validate_routing_rules(
+            [_rule("j", ["x"], {"type": "route", "to": "restructure"})],
             {"j"},
             persona_labels=set(),
             tool_aliases=set(),
