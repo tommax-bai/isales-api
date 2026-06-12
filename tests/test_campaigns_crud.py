@@ -32,7 +32,6 @@ def _campaign_payload(**overrides: object) -> dict[str, object]:
         "transfer_llm_enabled": False,
         "retry_max_count": 3,
         "follow_up_max_count": 0,
-        "do_not_call_llm_enabled": False,
         "respect_holidays": True,
         "role_configs": [],
         "filler_phrases": [],

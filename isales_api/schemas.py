@@ -156,10 +156,6 @@ class CampaignNestedUpdate(AppModel):
     follow_up_interval_days: int | None = None
     follow_up_max_count: int | None = None
 
-    do_not_call_keywords: list[str] | None = None
-    do_not_call_llm_enabled: bool | None = None
-    do_not_call_llm_prompt_version_id: int | None = None
-
     respect_holidays: bool | None = None
 
     role_configs: list[RoleConfigNestedWrite] | None = None
