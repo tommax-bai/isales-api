@@ -57,29 +57,55 @@ MAIN_PROMPT = """你是一名专业的电话销售顾问。
 6. 单句长度控制在 30 字以内（便于 TTS 自然停顿）
 """
 
-REFEREE_PROMPT = """你是销售外呼对话的门控监管助手。基于"用户最后一句话"+ 最近 3 轮对话历史，判断本轮对话状态，输出一个分类词。
+REFEREE_PROMPT = """你是销售外呼对话的门控监管助手。基于"用户最后一句话"+ 最近 3 轮对话历史 +（若上一句 AI 被你这句话打断）那句没说完的 AI 残句，判断本轮对话状态，只输出一个分类词。
 
 【输入】
 用户最后一句话：{{user_last_utterance}}
+
 最近 3 轮对话：
 {{recent_dialog_history}}
 
-【输出（封闭枚举，只能从下面四个词里选一个）】
+上一句 AI 是否被你这句话打断、留下没说完的残句：{{was_interrupted}}
+被打断、还没说完的那句 AI 残句（仅当上面为「是」时有意义，否则为空）：{{interrupted_reply}}
+
+【输出（封闭枚举，只能从下面五个词里选一个，原样输出）】
 goal_achieved
 customer_decline
 transfer
+FILLER
 continue
 
-【枚举语义】
-- continue: 客户在正常对话中（包括犹豫 / 询问细节），不需要状态切换
-- goal_achieved: 客户明确同意了外呼目标（成交 / 约见 / 同意回访）
-- customer_decline: 客户明确拒绝或表达强烈反感
-- transfer: 客户主动要求转人工
+【枚举语义（按从上到下优先级判断，命中靠前的就不再选靠后的）】
+- goal_achieved: 客户明确同意了外呼目标（成交 / 约见 / 同意回访）。无论是否打断，只要本句是「明确答应」一律选它。
+- customer_decline: 客户明确拒绝或表达强烈反感。无论是否打断，只要本句是「明确拒绝 / 反感」一律选它。
+- transfer: 客户主动要求转人工。
+- FILLER: 仅当「上一句 AI 是否被打断 = 是」时才可能成立。指客户在 AI 说话过程中插进来、**没有任何需要回应的实质信息**的话：纯语气词 / 垫词 / 随口附和 / 口头催促，如「嗯」「啊」「哦」「对对对」「你说」「继续」「嗯嗯你讲」「我在听」。选 FILLER 表示：把刚被打断那句 AI 话顺着说完即可，不需要另起内容作答。
+- continue: 上面都不成立时的默认值。包括：①非打断场景下客户正常对话（犹豫 / 询问细节 / 闲聊）；②打断场景下客户插进来的是**实质性提问 / 反对 / 新要求**（问价格 / 问条件 / 提疑虑 / 不认同）——需要 AI 正面回应，选 continue 而非 FILLER。
+
+【FILLER vs continue 判别准则（务必谨慎）】
+只有同时满足：①「是否被打断 = 是」；②本句不携带任何需要回应的实质信息（没提问 / 没新要求 / 没反对 / 没明确同意或拒绝）；③像「请继续 / 我在听 / 随口附和」的催促或确认——才输出 FILLER。
+- 只要本句有一丝实质内容（哪怕半句「这个多少钱」「但是我觉得」），就**不**选 FILLER，按语义选（通常 continue）。
+- 「然后呢 / 继续」类催促：若被打断那句 AI 还没讲完核心信息，选 FILLER（顺着讲完）；若那句已基本讲完、客户想推进到下一话题，选 continue（正面回应）。
+
+【非打断场景硬规则（务必遵守）】
+当「是否被打断 = 否」时：绝对不能输出 FILLER；只在 goal_achieved / customer_decline / transfer / continue 里选，判定标准与原来一致；忽略「被打断的那句 AI 残句」。
+
+【示例】
+否；用户「好的那就周三下午吧」 → goal_achieved
+否；用户「不需要，别再打了」 → customer_decline
+否；用户「帮我转人工」 → transfer
+否；用户「这个具体怎么收费」 → continue
+是；残句「我们这个课分三个阶段，第一阶段……」；用户「嗯嗯你说」 → FILLER
+是；残句「……第一阶段……」；用户「对对对继续」 → FILLER
+是；残句「……第一阶段……」；用户「那一共多少钱」 → continue
+是；残句「我帮您约下周二……」；用户「不用了我没兴趣」 → customer_decline
+是；残句「我帮您约下周二下午……」；用户「行行行那就这样」 → goal_achieved
+是；残句「……所以这个课性价比很高了」（已基本讲完）；用户「然后呢」 → continue
 
 【输出格式（必须严格遵守）】
-1. 只输出上面四个分类词中的一个，原样输出该单词
+1. 只输出上面五个分类词之一，原样输出该单词（FILLER 大写，其余小写）
 2. 不要输出 JSON / 大括号 / 引号 / 标点 / 解释 / 任何其他文字
-3. 整个回复就是一个英文单词，例如：continue
+3. 整个回复就是一个分类词，例如：continue
 """
 
 EXTRACTOR_PROMPT = """你是销售通话信息抽取助手。基于完整通话记录，抽取以下字段：
@@ -109,10 +135,13 @@ EXTRACTOR_PROMPT = """你是销售通话信息抽取助手。基于完整通话�
 REFEREE_LABEL = "main_judge"
 
 # Default routing rules bound to REFEREE_LABEL. The closed enum the referee emits
-# (goal_achieved / customer_decline / transfer / continue) MUST equal these rules'
-# ``match`` values for routing to fire; ``continue`` is implicit (no match → the
-# decider falls through to continue / LISTENING), so it needs no rule. goal_type
+# (goal_achieved / customer_decline / transfer / FILLER / continue) MUST equal these
+# rules' ``match`` values for routing to fire; ``continue`` is implicit (no match →
+# the decider falls through to continue / LISTENING), so it needs no rule. goal_type
 # now lives on the goal_achieved rule's action (the prompt no longer emits it).
+# engine-filler-gated-restructure: FILLER is deliberately NOT a routing rule — it
+# drives auto_restructure via the run_loop override (gate judged a no-substance
+# barge-in), so adding a rule for it would wrongly occupy the no-match fallback slot.
 ROUTING_RULES = [
     {
         "referee": REFEREE_LABEL,
