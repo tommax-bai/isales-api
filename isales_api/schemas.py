@@ -124,6 +124,11 @@ class CampaignNestedUpdate(AppModel):
     # engine default 400ms.
     asr_eos_silence_ms: int | None = None
 
+    # ambient background mix (engine-ambient-background-mix). Declared here or
+    # the model_dump(exclude_unset) PATCH apply would silently drop them.
+    ambient_audio: str | None = Field(default=None, max_length=128)
+    ambient_gain: float | None = Field(default=None, ge=0.0, le=1.0)
+
     # filler time-gate in ms (tts-cache-and-gated-filler § B). NULL → 600ms.
     filler_delay_ms: int | None = None
 
