@@ -135,6 +135,10 @@ class CampaignNestedUpdate(AppModel):
     wrap_up_max_rounds: int | None = None
     wrap_up_max_seconds: int | None = None
     wrap_up_closing_phrases: list[str] | None = None
+    # engine-wrap-up-silence-hangup: declared here or the bulk
+    # model_dump(exclude_unset) PATCH apply would reject it (extra=forbid).
+    # Bounds mirror CampaignBase (ge=0).
+    wrap_up_silence_hangup_ms: int | None = Field(default=None, ge=0)
 
     greeting: str | None = None
     filler_enabled: bool | None = None
