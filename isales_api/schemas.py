@@ -150,6 +150,9 @@ class CampaignNestedUpdate(AppModel):
     interruption_whitelist: list[str] | None = None
     interruption_min_duration_ms: int | None = None
     interruption_min_chars: int | None = Field(default=None, ge=1)
+    # engine-barge-in-fade-out: same mirror discipline — declare here or a PATCH
+    # carrying this field 422s (extra=forbid on this hand-kept mirror).
+    barge_in_fadeout_ms: int | None = Field(default=None, ge=0)
     max_continuous_interruptions: int | None = None
     continuous_interruption_strategy: ContinuousInterruptionStrategy | None = None
 
