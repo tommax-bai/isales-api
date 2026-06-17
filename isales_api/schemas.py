@@ -139,6 +139,9 @@ class CampaignNestedUpdate(AppModel):
     # model_dump(exclude_unset) PATCH apply would reject it (extra=forbid).
     # Bounds mirror CampaignBase (ge=0).
     wrap_up_silence_hangup_ms: int | None = Field(default=None, ge=0)
+    # engine-wrap-up-bypass-referee: same mirror discipline — must be declared
+    # here too or PATCH with this field 422s (extra=forbid on this hand-kept mirror).
+    wrap_up_referee_enabled: bool | None = None
 
     greeting: str | None = None
     filler_enabled: bool | None = None
